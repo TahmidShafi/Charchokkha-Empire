@@ -133,7 +133,7 @@ export const RoomSettingsSchema = z.object({
   isPrivate: z.boolean().default(true),
   allowBots: z.boolean().default(false),
   startingCash: z.number().int().min(500).max(5000).default(1500),
-  doubleRent: z.boolean().default(false),
+  doubleRent: z.boolean().default(true),
   vacationCash: z.boolean().default(false),
   auction: z.boolean().default(true),
   noRentInPrison: z.boolean().default(false),
@@ -210,6 +210,8 @@ export const GameSettingsRulesSchema = z.object({
   noRentInPrison: z.boolean().optional(),
   vacationCash: z.boolean().optional(),
   evenBuild: z.boolean().optional(),
+  auction: z.boolean().optional(),
+  mortgage: z.boolean().optional(),
 });
 
 export type GameSettingsRules = z.infer<typeof GameSettingsRulesSchema>;
@@ -231,6 +233,7 @@ export const GameStateSchema = z.object({
   winnerId: z.string().optional(),
   chestCardIndex: z.number().int().optional(),
   chanceCardIndex: z.number().int().optional(),
+  vacationPot: z.number().int().nonnegative().optional(),
 });
 
 export type GameState = z.infer<typeof GameStateSchema>;

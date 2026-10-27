@@ -643,4 +643,88 @@ describe('Authoritative Game Engine — Milestone 4 Suite', () => {
       expect(p2End.state.currentTurnIndex).toBe(0);
     });
   });
+
+  describe('Configurable Room Rules Enforcement', () => {
+    it('accumulates tax and penalty fines into vacationPot and awards them on space 20', () => {
+      const state = createInitialGameState([p1, p2], 1500, 200, { vacationCash: true });
+      expect(state.vacationPot).toBe(0);
+
+      // P1 rolls 4 -> lands on space 4 (Tax, price 100)
+      const taxRoll = processRollDice(state, p1, [1, 3]);
+      expect(taxRoll.success).toBe(true);
+      expect(taxRoll.state.players[p1].position).toBe(4);
+      expect(taxRoll.state.players[p1].cash).toBe(1400); // 1500 - 100
+      expect(taxRoll.state.vacationPot).toBe(100);
+
+      // P2 is in prison and pays $50 fine
+      taxRoll.state.players[p2].inPrison = true;
+      taxRoll.state.activePlayerId = p2;
+      const fineRes = processPayPrisonFine(taxRoll.state, p2);
+      expect(fineRes.success).toBe(true);
+      expect(fineRes.state.players[p2].cash).toBe(1450); // 1500 - 50
+      expect(fineRes.state.vacationPot).toBe(150); // 100 + 50
+
+      // P2 moves to space 10, rolls 10 to land directly on space 20 (Vacation)
+      fineRes.state.players[p2].position = 10;
+      fineRes.state.activePlayerId = p2;
+      fineRes.state.turnPhase = 'need_roll';
+      const vacationRoll = processRollDice(fineRes.state, p2, [5, 5]);
+      expect(vacationRoll.success).toBe(true);
+      expect(vacationRoll.state.players[p2].position).toBe(20);
+      expect(vacationRoll.state.players[p2].cash).toBe(1600); // 1450 + 150 pot
+      expect(vacationRoll.state.vacationPot).toBe(0); // Pot emptied
+    });
+
+    it('ends turn without auction when rules.auction is false and property is declined', () => {
+      const state = createInitialGameState([p1, p2], 1500, 200, { auction: false });
+      // P1 rolls 3 -> lands on space 3 (Rio, purchasable)
+      const rollRes = processRollDice(state, p1, [1, 2]); // roll 3
+      expect(rollRes.success).toBe(true);
+      expect(rollRes.state.turnPhase).toBe('action_pending');
+
+      const declineRes = processDeclineProperty(rollRes.state, p1);
+      expect(declineRes.success).toBe(true);
+      expect(declineRes.state.auction).toBeNull();
+      expect(declineRes.state.turnPhase).toBe('turn_ended');
+    });
+
+    it('rejects mortgaging when rules.mortgage is false', () => {
+      const state = createInitialGameState([p1, p2], 1500, 200, { mortgage: false });
+      state.properties[1] = { ownerId: p1, houses: 0, isMortgaged: false };
+
+      const mortRes = processMortgageProperty(state, p1, 1);
+      expect(mortRes.success).toBe(false);
+      expect(mortRes.error?.code).toBe('MORTGAGE_DISABLED');
+    });
+
+    it('does not double unimproved rent on monopoly when doubleRent rule is false', () => {
+      const state = createInitialGameState([p1, p2], 1500, 200, { doubleRent: false });
+      state.properties[1] = { ownerId: p1, houses: 0, isMortgaged: false };
+      state.properties[3] = { ownerId: p1, houses: 0, isMortgaged: false };
+
+      // P2 lands on Rio (space 3, base rent 4)
+      state.activePlayerId = p2;
+      state.currentTurnIndex = 1;
+      const rollRes = processRollDice(state, p2, [1, 2]); // lands on 3
+      expect(rollRes.success).toBe(true);
+      // Rent is base rent 4, not 8!
+      expect(rollRes.state.players[p2].cash).toBe(1496);
+      expect(rollRes.state.players[p1].cash).toBe(1504);
+    });
+
+    it('exempts opponent from rent when owner is in prison and noRentInPrison rule is true', () => {
+      const state = createInitialGameState([p1, p2], 1500, 200, { noRentInPrison: true });
+      state.properties[3] = { ownerId: p1, houses: 0, isMortgaged: false };
+      state.players[p1].inPrison = true;
+
+      // P2 lands on space 3
+      state.activePlayerId = p2;
+      state.currentTurnIndex = 1;
+      const rollRes = processRollDice(state, p2, [1, 2]);
+      expect(rollRes.success).toBe(true);
+      // No rent paid!
+      expect(rollRes.state.players[p2].cash).toBe(1500);
+      expect(rollRes.state.players[p1].cash).toBe(1500);
+    });
+  });
 });

@@ -63,6 +63,8 @@ export interface GameSettingsRules {
   noRentInPrison?: boolean;
   vacationCash?: boolean;
   evenBuild?: boolean;
+  auction?: boolean;
+  mortgage?: boolean;
 }
 
 export interface GameState {
@@ -82,6 +84,7 @@ export interface GameState {
   winnerId?: string;
   chestCardIndex: number;
   chanceCardIndex: number;
+  vacationPot?: number;
 }
 
 export interface EngineActionResult {
@@ -151,6 +154,7 @@ export function createInitialGameState(
     rules: { ...rules },
     chestCardIndex: 0,
     chanceCardIndex: 0,
+    vacationPot: 0,
     lastActionMessage: 'Game started. Player 1 turn to roll.',
   };
 }
@@ -183,6 +187,7 @@ export function cloneGameState(state: GameState): GameState {
         }
       : null,
     rules: { ...state.rules },
+    vacationPot: state.vacationPot ?? 0,
   };
 }
 
@@ -249,6 +254,9 @@ export function processRollDice(
         // 3rd failed attempt: forced to pay $50 fine
         const fine = Math.min(player.cash, 50);
         player.cash -= fine;
+        if (nextState.rules.vacationCash) {
+          nextState.vacationPot = (nextState.vacationPot ?? 0) + fine;
+        }
         player.inPrison = false;
         player.prisonTurns = 0;
         nextState.lastActionMessage = `3rd attempt failed. Paid $${fine} fine to leave prison.`;
@@ -288,6 +296,9 @@ export function processRollDice(
     const taxAmount = space.price ?? 100;
     const payment = Math.min(player.cash, taxAmount);
     player.cash -= payment;
+    if (nextState.rules.vacationCash) {
+      nextState.vacationPot = (nextState.vacationPot ?? 0) + payment;
+    }
     nextState.turnPhase = 'turn_ended';
     actionSummary += ` Paid $${payment} in tax.`;
   } else if (space.type === 'treasure') {
@@ -322,7 +333,7 @@ export function processRollDice(
         getHouses: (sId) => getPropertyRecord(nextState, sId)?.houses ?? 0,
         isMortgaged: (sId) => getPropertyRecord(nextState, sId)?.isMortgaged ?? false,
         diceTotal,
-        doubleRentRule: nextState.rules.doubleRent,
+        doubleRentRule: nextState.rules.doubleRent ?? true,
         noRentInPrisonRule: nextState.rules.noRentInPrison,
         ownerInPrison: owner?.inPrison ?? false,
       });
@@ -345,6 +356,12 @@ export function processRollDice(
     }
   } else {
     // Corners (START, In Prison, Vacation)
+    if (newPos === 20 && nextState.rules.vacationCash && (nextState.vacationPot ?? 0) > 0) {
+      const pot = nextState.vacationPot!;
+      player.cash += pot;
+      nextState.vacationPot = 0;
+      actionSummary += ` Collected $${pot} from Vacation cash pot!`;
+    }
     nextState.turnPhase = 'turn_ended';
   }
 
@@ -373,6 +390,9 @@ export function processPayPrisonFine(state: GameState, playerId: string): Engine
   const nextState = cloneGameState(state);
   const nextPlayer = nextState.players[playerId];
   nextPlayer.cash -= 50;
+  if (nextState.rules.vacationCash) {
+    nextState.vacationPot = (nextState.vacationPot ?? 0) + 50;
+  }
   nextPlayer.inPrison = false;
   nextPlayer.prisonTurns = 0;
   nextState.turnPhase = 'need_roll';
@@ -440,6 +460,13 @@ export function processDeclineProperty(state: GameState, playerId: string): Engi
   const nextState = cloneGameState(state);
   const spaceId = nextState.players[playerId].position;
   const space = getBoardSpace(spaceId);
+
+  // If room rule disables auction, simply end turn without starting auction
+  if (state.rules.auction === false) {
+    nextState.turnPhase = 'turn_ended';
+    nextState.lastActionMessage = `Player chose not to buy ${space.name}.`;
+    return { success: true, state: nextState };
+  }
 
   // Start auction
   const activeBidders = nextState.turnOrder.filter((id) => !nextState.players[id].isBankrupt);
@@ -534,6 +561,9 @@ export function processAuctionPass(state: GameState, playerId: string): EngineAc
 export function processMortgageProperty(state: GameState, playerId: string, spaceId: number): EngineActionResult {
   if (state.phase !== 'in_progress') {
     return { success: false, state, error: { code: 'GAME_NOT_IN_PROGRESS', message: 'Game is not in progress' } };
+  }
+  if (state.rules.mortgage === false) {
+    return { success: false, state, error: { code: 'MORTGAGE_DISABLED', message: 'Mortgaging is disabled by room rules' } };
   }
   const prop = getPropertyRecord(state, spaceId);
   if (!prop || prop.ownerId !== playerId) {

@@ -139,7 +139,7 @@ export function calculateRentAmount(params: {
     getHouses = () => 0,
     isMortgaged = () => false,
     diceTotal = 7,
-    doubleRentRule = false,
+    doubleRentRule = true,
     noRentInPrisonRule = false,
     ownerInPrison = false,
   } = params;
@@ -178,14 +178,10 @@ export function calculateRentAmount(params: {
     } else {
       // Unimproved property: check for complete color group monopoly
       const isMonopoly = hasColorMonopoly(space.group, ownerId, getPropertyOwner);
-      if (isMonopoly) {
+      if (isMonopoly && doubleRentRule) {
         rent = (space.rent ?? 0) * 2;
       }
     }
-  }
-
-  if (doubleRentRule) {
-    rent *= 2;
   }
 
   return rent;

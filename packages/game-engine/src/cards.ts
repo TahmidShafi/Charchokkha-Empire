@@ -25,6 +25,9 @@ export const TREASURE_CARDS: GameCard[] = [
     apply: (state, playerId) => {
       const fee = Math.min(state.players[playerId].cash, 50);
       state.players[playerId].cash -= fee;
+      if (state.rules.vacationCash) {
+        state.vacationPot = (state.vacationPot ?? 0) + fee;
+      }
       return `Doctor's fee: Paid $${fee}.`;
     },
   },
@@ -71,6 +74,9 @@ export const TREASURE_CARDS: GameCard[] = [
     apply: (state, playerId) => {
       const fee = Math.min(state.players[playerId].cash, 100);
       state.players[playerId].cash -= fee;
+      if (state.rules.vacationCash) {
+        state.vacationPot = (state.vacationPot ?? 0) + fee;
+      }
       return `Hospital fees: Paid $${fee}.`;
     },
   },
@@ -124,6 +130,9 @@ export const CHANCE_CARDS: GameCard[] = [
     apply: (state, playerId) => {
       const fee = Math.min(state.players[playerId].cash, 15);
       state.players[playerId].cash -= fee;
+      if (state.rules.vacationCash) {
+        state.vacationPot = (state.vacationPot ?? 0) + fee;
+      }
       return `Speeding fine: Paid $${fee}.`;
     },
   },
