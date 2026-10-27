@@ -4,6 +4,8 @@ import { ChatPanel, type ChatMessage } from './ChatPanel';
 import { GameSettings } from './GameSettings';
 import {
   SOCKET_EVENTS,
+  type Player,
+  type RoomSettings,
   type RoomSnapshot,
   type SocketAck,
 } from '@charchokkha/shared';
@@ -36,7 +38,7 @@ export function GameRoom({
   const roomCode = roomSnapshot.code;
   const roomUrl = `https://charchokkha.io/room/${roomCode}`;
 
-  const currentPlayer = roomSnapshot.players.find((p) => p.id === currentSessionId);
+  const currentPlayer = roomSnapshot.players.find((p: Player) => p.id === currentSessionId);
   const isHost = currentSessionId === roomSnapshot.hostId;
   const currentAvatar = currentPlayer?.avatar || AVATAR_OPTIONS[avatarIndex];
   const playerName = currentPlayer?.nickname || 'Guest';
@@ -96,6 +98,15 @@ export function GameRoom({
     );
   };
 
+  const handleUpdateSettings = (partial: Partial<RoomSettings>) => {
+    if (!socket || !isHost) return;
+    socket.emit(
+      SOCKET_EVENTS.ROOM_UPDATE_SETTINGS,
+      { roomCode, settings: partial },
+      (_ack: SocketAck<RoomSnapshot>) => {}
+    );
+  };
+
   // Authoritative Game Actions
   const handleStartGame = () => {
     if (!socket || !isHost) return;
@@ -127,6 +138,132 @@ export function GameRoom({
       if (!ack.ok) {
         // eslint-disable-next-line no-console
         console.error('Failed to buy property:', ack.error.message);
+      }
+    });
+  };
+
+  const handleDeclineProperty = () => {
+    if (!socket) return;
+    socket.emit(SOCKET_EVENTS.GAME_DECLINE_PROPERTY, { roomCode }, (ack: SocketAck<RoomSnapshot>) => {
+      if (!ack.ok) {
+        // eslint-disable-next-line no-console
+        console.error('Failed to decline property:', ack.error.message);
+      }
+    });
+  };
+
+  const handleAuctionBid = (bidAmount: number) => {
+    if (!socket) return;
+    socket.emit(SOCKET_EVENTS.GAME_AUCTION_BID, { roomCode, bidAmount }, (ack: SocketAck<RoomSnapshot>) => {
+      if (!ack.ok) {
+        // eslint-disable-next-line no-console
+        console.error('Failed to place bid:', ack.error.message);
+      }
+    });
+  };
+
+  const handleAuctionPass = () => {
+    if (!socket) return;
+    socket.emit(SOCKET_EVENTS.GAME_AUCTION_PASS, { roomCode }, (ack: SocketAck<RoomSnapshot>) => {
+      if (!ack.ok) {
+        // eslint-disable-next-line no-console
+        console.error('Failed to pass auction:', ack.error.message);
+      }
+    });
+  };
+
+  const handlePayPrisonFine = () => {
+    if (!socket) return;
+    socket.emit(SOCKET_EVENTS.GAME_PAY_PRISON_FINE, { roomCode }, (ack: SocketAck<RoomSnapshot>) => {
+      if (!ack.ok) {
+        // eslint-disable-next-line no-console
+        console.error('Failed to pay fine:', ack.error.message);
+      }
+    });
+  };
+
+  const handleMortgageProperty = (spaceId: number) => {
+    if (!socket) return;
+    socket.emit(SOCKET_EVENTS.GAME_MORTGAGE_PROPERTY, { roomCode, spaceId }, (ack: SocketAck<RoomSnapshot>) => {
+      if (!ack.ok) {
+        // eslint-disable-next-line no-console
+        console.error('Failed to mortgage:', ack.error.message);
+      }
+    });
+  };
+
+  const handleUnmortgageProperty = (spaceId: number) => {
+    if (!socket) return;
+    socket.emit(SOCKET_EVENTS.GAME_UNMORTGAGE_PROPERTY, { roomCode, spaceId }, (ack: SocketAck<RoomSnapshot>) => {
+      if (!ack.ok) {
+        // eslint-disable-next-line no-console
+        console.error('Failed to unmortgage:', ack.error.message);
+      }
+    });
+  };
+
+  const handleBuildHouse = (spaceId: number) => {
+    if (!socket) return;
+    socket.emit(SOCKET_EVENTS.GAME_BUILD_HOUSE, { roomCode, spaceId }, (ack: SocketAck<RoomSnapshot>) => {
+      if (!ack.ok) {
+        // eslint-disable-next-line no-console
+        console.error('Failed to build house:', ack.error.message);
+      }
+    });
+  };
+
+  const handleSellHouse = (spaceId: number) => {
+    if (!socket) return;
+    socket.emit(SOCKET_EVENTS.GAME_SELL_HOUSE, { roomCode, spaceId }, (ack: SocketAck<RoomSnapshot>) => {
+      if (!ack.ok) {
+        // eslint-disable-next-line no-console
+        console.error('Failed to sell house:', ack.error.message);
+      }
+    });
+  };
+
+  const handleCreateTrade = (trade: {
+    receiverId: string;
+    offeredCash: number;
+    offeredPropertyIds: number[];
+    requestedCash: number;
+    requestedPropertyIds: number[];
+  }) => {
+    if (!socket) return;
+    socket.emit(SOCKET_EVENTS.GAME_TRADE_CREATE, { roomCode, ...trade }, (ack: SocketAck<RoomSnapshot>) => {
+      if (!ack.ok) {
+        // eslint-disable-next-line no-console
+        console.error('Failed to create trade:', ack.error.message);
+      }
+    });
+  };
+
+  const handleAcceptTrade = () => {
+    if (!socket) return;
+    socket.emit(SOCKET_EVENTS.GAME_TRADE_ACCEPT, { roomCode }, (ack: SocketAck<RoomSnapshot>) => {
+      if (!ack.ok) {
+        // eslint-disable-next-line no-console
+        console.error('Failed to accept trade:', ack.error.message);
+      }
+    });
+  };
+
+  const handleRejectTrade = () => {
+    if (!socket) return;
+    socket.emit(SOCKET_EVENTS.GAME_TRADE_REJECT, { roomCode }, (ack: SocketAck<RoomSnapshot>) => {
+      if (!ack.ok) {
+        // eslint-disable-next-line no-console
+        console.error('Failed to reject trade:', ack.error.message);
+      }
+    });
+  };
+
+  const handleDeclareBankruptcy = () => {
+    if (!socket) return;
+    socket.emit(SOCKET_EVENTS.GAME_DECLARE_BANKRUPTCY, { roomCode }, (ack: SocketAck<RoomSnapshot>) => {
+      if (!ack.ok) {
+        // eslint-disable-next-line no-console
+        console.error('Failed to declare bankruptcy:', ack.error.message);
       }
     });
   };
@@ -201,6 +338,18 @@ export function GameRoom({
             onStartGame={handleStartGame}
             onRollDice={handleRollDice}
             onBuyProperty={handleBuyProperty}
+            onDeclineProperty={handleDeclineProperty}
+            onAuctionBid={handleAuctionBid}
+            onAuctionPass={handleAuctionPass}
+            onPayPrisonFine={handlePayPrisonFine}
+            onMortgageProperty={handleMortgageProperty}
+            onUnmortgageProperty={handleUnmortgageProperty}
+            onBuildHouse={handleBuildHouse}
+            onSellHouse={handleSellHouse}
+            onCreateTrade={handleCreateTrade}
+            onAcceptTrade={handleAcceptTrade}
+            onRejectTrade={handleRejectTrade}
+            onDeclareBankruptcy={handleDeclareBankruptcy}
             onEndTurn={handleEndTurn}
             isRolling={isRolling}
           />
@@ -222,6 +371,8 @@ export function GameRoom({
             onAllowBotsChange={handleUpdateAllowBots}
             startingCash={roomSnapshot.settings.startingCash}
             onStartingCashChange={handleUpdateStartingCash}
+            settings={roomSnapshot.settings}
+            onUpdateSettings={handleUpdateSettings}
             gameState={roomSnapshot.gameState}
           />
         </aside>

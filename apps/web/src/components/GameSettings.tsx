@@ -1,5 +1,4 @@
-import { useState } from 'react';
-import { type GameState, type Player } from '@charchokkha/shared';
+import { type GameState, type Player, type RoomSettings } from '@charchokkha/shared';
 
 export interface GameSettingsProps {
   playerName: string;
@@ -15,6 +14,8 @@ export interface GameSettingsProps {
   onAllowBotsChange: (val: boolean) => void;
   startingCash: number;
   onStartingCashChange: (val: number) => void;
+  settings?: RoomSettings;
+  onUpdateSettings?: (partial: Partial<RoomSettings>) => void;
   gameState?: GameState;
 }
 
@@ -32,15 +33,16 @@ export function GameSettings({
   onAllowBotsChange,
   startingCash,
   onStartingCashChange,
+  settings,
+  onUpdateSettings,
   gameState,
 }: GameSettingsProps) {
-  // Gameplay rule toggles (client visual state for un-modeled rule variations)
-  const [doubleRent, setDoubleRent] = useState(false);
-  const [vacationCash, setVacationCash] = useState(false);
-  const [auction, setAuction] = useState(false);
-  const [noRentInPrison, setNoRentInPrison] = useState(false);
-  const [mortgage, setMortgage] = useState(false);
-  const [evenBuild, setEvenBuild] = useState(true);
+  const doubleRent = settings?.doubleRent ?? false;
+  const vacationCash = settings?.vacationCash ?? false;
+  const auction = settings?.auction ?? true;
+  const noRentInPrison = settings?.noRentInPrison ?? false;
+  const mortgage = settings?.mortgage ?? true;
+  const evenBuild = settings?.evenBuild ?? true;
 
   return (
     <div className="room-right-col">
@@ -246,7 +248,7 @@ export function GameSettings({
               type="checkbox"
               checked={doubleRent}
               disabled={!isHost}
-              onChange={(e) => setDoubleRent(e.target.checked)}
+              onChange={(e) => onUpdateSettings?.({ doubleRent: e.target.checked })}
             />
             <span className="slider-round" />
           </label>
@@ -266,7 +268,7 @@ export function GameSettings({
               type="checkbox"
               checked={vacationCash}
               disabled={!isHost}
-              onChange={(e) => setVacationCash(e.target.checked)}
+              onChange={(e) => onUpdateSettings?.({ vacationCash: e.target.checked })}
             />
             <span className="slider-round" />
           </label>
@@ -286,7 +288,7 @@ export function GameSettings({
               type="checkbox"
               checked={auction}
               disabled={!isHost}
-              onChange={(e) => setAuction(e.target.checked)}
+              onChange={(e) => onUpdateSettings?.({ auction: e.target.checked })}
             />
             <span className="slider-round" />
           </label>
@@ -306,7 +308,7 @@ export function GameSettings({
               type="checkbox"
               checked={noRentInPrison}
               disabled={!isHost}
-              onChange={(e) => setNoRentInPrison(e.target.checked)}
+              onChange={(e) => onUpdateSettings?.({ noRentInPrison: e.target.checked })}
             />
             <span className="slider-round" />
           </label>
@@ -326,7 +328,7 @@ export function GameSettings({
               type="checkbox"
               checked={mortgage}
               disabled={!isHost}
-              onChange={(e) => setMortgage(e.target.checked)}
+              onChange={(e) => onUpdateSettings?.({ mortgage: e.target.checked })}
             />
             <span className="slider-round" />
           </label>
@@ -346,7 +348,7 @@ export function GameSettings({
               type="checkbox"
               checked={evenBuild}
               disabled={!isHost}
-              onChange={(e) => setEvenBuild(e.target.checked)}
+              onChange={(e) => onUpdateSettings?.({ evenBuild: e.target.checked })}
             />
             <span className="slider-round" />
           </label>
