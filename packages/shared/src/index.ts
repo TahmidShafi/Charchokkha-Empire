@@ -29,6 +29,18 @@ export const SOCKET_EVENTS = {
   GAME_START: 'game:start',
   GAME_ROLL_DICE: 'game:roll_dice',
   GAME_BUY_PROPERTY: 'game:buy_property',
+  GAME_DECLINE_PROPERTY: 'game:decline_property',
+  GAME_AUCTION_BID: 'game:auction_bid',
+  GAME_AUCTION_PASS: 'game:auction_pass',
+  GAME_PAY_PRISON_FINE: 'game:pay_prison_fine',
+  GAME_MORTGAGE_PROPERTY: 'game:mortgage_property',
+  GAME_UNMORTGAGE_PROPERTY: 'game:unmortgage_property',
+  GAME_BUILD_HOUSE: 'game:build_house',
+  GAME_SELL_HOUSE: 'game:sell_house',
+  GAME_TRADE_CREATE: 'game:trade_create',
+  GAME_TRADE_ACCEPT: 'game:trade_accept',
+  GAME_TRADE_REJECT: 'game:trade_reject',
+  GAME_DECLARE_BANKRUPTCY: 'game:declare_bankruptcy',
   GAME_END_TURN: 'game:end_turn',
 
   // Game updates (Server -> Client)
@@ -121,18 +133,25 @@ export const RoomSettingsSchema = z.object({
   isPrivate: z.boolean().default(true),
   allowBots: z.boolean().default(false),
   startingCash: z.number().int().min(500).max(5000).default(1500),
+  doubleRent: z.boolean().default(false),
+  vacationCash: z.boolean().default(false),
+  auction: z.boolean().default(true),
+  noRentInPrison: z.boolean().default(false),
+  mortgage: z.boolean().default(true),
+  evenBuild: z.boolean().default(true),
 });
 
 export type RoomSettings = z.infer<typeof RoomSettingsSchema>;
 
 /* --------------------------------------------------------------------------
-   Milestone 3 Contracts: Authoritative Game Engine & Actions
+   Milestone 3 & 4 Contracts: Authoritative Game Engine & Actions
    -------------------------------------------------------------------------- */
 
 export const TurnPhaseSchema = z.enum([
   'need_roll',
   'action_pending',
   'turn_ended',
+  'in_auction',
 ]);
 
 export type TurnPhase = z.infer<typeof TurnPhaseSchema>;
@@ -142,6 +161,8 @@ export const PlayerGameStateSchema = z.object({
   position: z.number().int().min(0).max(39),
   cash: z.number().int(),
   isBankrupt: z.boolean().default(false),
+  inPrison: z.boolean().default(false),
+  prisonTurns: z.number().int().default(0),
 });
 
 export type PlayerGameState = z.infer<typeof PlayerGameStateSchema>;
@@ -155,6 +176,44 @@ export const LastDiceRollSchema = z.object({
 
 export type LastDiceRoll = z.infer<typeof LastDiceRollSchema>;
 
+export const PropertyRecordSchema = z.object({
+  ownerId: z.string(),
+  houses: z.number().int().min(0).max(5).default(0),
+  isMortgaged: z.boolean().default(false),
+});
+
+export type PropertyRecord = z.infer<typeof PropertyRecordSchema>;
+
+export const AuctionStateSchema = z.object({
+  spaceId: z.number().int().min(0).max(39),
+  currentBid: z.number().int().nonnegative(),
+  highBidderId: z.string().nullable(),
+  activeBidders: z.array(z.string()),
+});
+
+export type AuctionState = z.infer<typeof AuctionStateSchema>;
+
+export const TradeOfferSchema = z.object({
+  id: z.string(),
+  senderId: z.string(),
+  receiverId: z.string(),
+  offeredCash: z.number().int().nonnegative(),
+  offeredPropertyIds: z.array(z.number().int()),
+  requestedCash: z.number().int().nonnegative(),
+  requestedPropertyIds: z.array(z.number().int()),
+});
+
+export type TradeOffer = z.infer<typeof TradeOfferSchema>;
+
+export const GameSettingsRulesSchema = z.object({
+  doubleRent: z.boolean().optional(),
+  noRentInPrison: z.boolean().optional(),
+  vacationCash: z.boolean().optional(),
+  evenBuild: z.boolean().optional(),
+});
+
+export type GameSettingsRules = z.infer<typeof GameSettingsRulesSchema>;
+
 export const GameStateSchema = z.object({
   phase: RoomLifecycleStateSchema,
   turnOrder: z.array(z.string()),
@@ -163,9 +222,15 @@ export const GameStateSchema = z.object({
   turnPhase: TurnPhaseSchema,
   lastDiceRoll: LastDiceRollSchema.nullable(),
   players: z.record(z.string(), PlayerGameStateSchema),
-  properties: z.record(z.string(), z.string()), // stringified spaceId -> ownerId
+  properties: z.record(z.string(), z.union([PropertyRecordSchema, z.string()])), // normalized record or legacy string
   lastActionMessage: z.string().optional(),
   startingSalary: z.number().int().positive().default(200),
+  auction: AuctionStateSchema.nullable().optional(),
+  pendingTrade: TradeOfferSchema.nullable().optional(),
+  rules: GameSettingsRulesSchema.optional(),
+  winnerId: z.string().optional(),
+  chestCardIndex: z.number().int().optional(),
+  chanceCardIndex: z.number().int().optional(),
 });
 
 export type GameState = z.infer<typeof GameStateSchema>;
@@ -249,6 +314,89 @@ export const BuyPropertyPayloadSchema = z.object({
 });
 
 export type BuyPropertyPayload = z.infer<typeof BuyPropertyPayloadSchema>;
+
+export const DeclinePropertyPayloadSchema = z.object({
+  roomCode: z.string().trim().min(3).max(10),
+});
+
+export type DeclinePropertyPayload = z.infer<typeof DeclinePropertyPayloadSchema>;
+
+export const AuctionBidPayloadSchema = z.object({
+  roomCode: z.string().trim().min(3).max(10),
+  bidAmount: z.number().int().positive('Bid amount must be a positive integer'),
+});
+
+export type AuctionBidPayload = z.infer<typeof AuctionBidPayloadSchema>;
+
+export const AuctionPassPayloadSchema = z.object({
+  roomCode: z.string().trim().min(3).max(10),
+});
+
+export type AuctionPassPayload = z.infer<typeof AuctionPassPayloadSchema>;
+
+export const PayPrisonFinePayloadSchema = z.object({
+  roomCode: z.string().trim().min(3).max(10),
+});
+
+export type PayPrisonFinePayload = z.infer<typeof PayPrisonFinePayloadSchema>;
+
+export const MortgagePropertyPayloadSchema = z.object({
+  roomCode: z.string().trim().min(3).max(10),
+  spaceId: z.number().int().min(0).max(39),
+});
+
+export type MortgagePropertyPayload = z.infer<typeof MortgagePropertyPayloadSchema>;
+
+export const UnmortgagePropertyPayloadSchema = z.object({
+  roomCode: z.string().trim().min(3).max(10),
+  spaceId: z.number().int().min(0).max(39),
+});
+
+export type UnmortgagePropertyPayload = z.infer<typeof UnmortgagePropertyPayloadSchema>;
+
+export const BuildHousePayloadSchema = z.object({
+  roomCode: z.string().trim().min(3).max(10),
+  spaceId: z.number().int().min(0).max(39),
+});
+
+export type BuildHousePayload = z.infer<typeof BuildHousePayloadSchema>;
+
+export const SellHousePayloadSchema = z.object({
+  roomCode: z.string().trim().min(3).max(10),
+  spaceId: z.number().int().min(0).max(39),
+});
+
+export type SellHousePayload = z.infer<typeof SellHousePayloadSchema>;
+
+export const TradeCreatePayloadSchema = z.object({
+  roomCode: z.string().trim().min(3).max(10),
+  receiverId: z.string().trim().min(1),
+  offeredCash: z.number().int().nonnegative().default(0),
+  offeredPropertyIds: z.array(z.number().int().min(0).max(39)).default([]),
+  requestedCash: z.number().int().nonnegative().default(0),
+  requestedPropertyIds: z.array(z.number().int().min(0).max(39)).default([]),
+});
+
+export type TradeCreatePayload = z.infer<typeof TradeCreatePayloadSchema>;
+
+export const TradeAcceptPayloadSchema = z.object({
+  roomCode: z.string().trim().min(3).max(10),
+});
+
+export type TradeAcceptPayload = z.infer<typeof TradeAcceptPayloadSchema>;
+
+export const TradeRejectPayloadSchema = z.object({
+  roomCode: z.string().trim().min(3).max(10),
+});
+
+export type TradeRejectPayload = z.infer<typeof TradeRejectPayloadSchema>;
+
+export const DeclareBankruptcyPayloadSchema = z.object({
+  roomCode: z.string().trim().min(3).max(10),
+  creditorId: z.string().optional(),
+});
+
+export type DeclareBankruptcyPayload = z.infer<typeof DeclareBankruptcyPayloadSchema>;
 
 export const EndTurnPayloadSchema = z.object({
   roomCode: z.string().trim().min(3).max(10),
