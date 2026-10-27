@@ -106,7 +106,7 @@ describe('Milestone 5A — Multiplayer Verification & Stabilization Suite', () =
     const initialGameState = startRes.data.gameState!;
     expect(initialGameState.activePlayerId).toBe(client1.session.sessionId);
     expect(initialGameState.turnPhase).toBe('need_roll');
-    expect(initialGameState.rules.vacationCash).toBe(true);
+    expect(initialGameState.rules?.vacationCash).toBe(true);
 
     // 6. Non-active player cannot roll out of turn
     const outOfTurnRoll = await new Promise<SocketAck<RoomSnapshot>>((resolve) => {
