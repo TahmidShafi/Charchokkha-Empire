@@ -363,6 +363,13 @@ export function Board({
             </div>
           )}
 
+          {/* Vacation Pot Indicator */}
+          {roomSnapshot.settings.vacationCash && isGameStarted && !isGameFinished && (
+            <div style={{ fontSize: '0.75rem', color: '#fef08a', background: '#362b00', border: '1px solid #ca8a04', padding: '2px 10px', borderRadius: '12px', marginBottom: '4px', fontWeight: 600 }}>
+              🌴 Vacation Pot: ${gameState?.vacationPot ?? 0}
+            </div>
+          )}
+
           {/* Turn indicator */}
           {isGameStarted && !isGameFinished && (
             <div className="center-turn-banner">

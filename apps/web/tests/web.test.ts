@@ -43,7 +43,7 @@ describe('Web Application Contract Consumption', () => {
   });
 });
 
-import { BOARD_SPACES } from '../src/boardData.js';
+import { BOARD_SPACES, PROPERTY_GROUP_COLORS } from '../src/boardData.js';
 
 describe('Tabletop Board Architecture Data', () => {
   it('defines exactly 40 spaces on the perimeter', () => {
@@ -73,4 +73,27 @@ describe('Tabletop Board Architecture Data', () => {
       expect(prop.group).toBeDefined();
     }
   });
+
+  it('validates canonical color groups have defined rich UI hex color tokens', () => {
+    const groups = ['brown', 'sky', 'pink', 'orange', 'red', 'yellow', 'green', 'blue'] as const;
+    for (const g of groups) {
+      expect(PROPERTY_GROUP_COLORS[g]).toBeDefined();
+      expect(PROPERTY_GROUP_COLORS[g]).toMatch(/^#[0-9a-f]{6}$/i);
+    }
+  });
 });
+
+import { RoomSettingsSchema } from '@charchokkha/shared';
+
+describe('Room Settings UI & Engine Defaults', () => {
+  it('supplies authoritative default rule configuration', () => {
+    const defaults = RoomSettingsSchema.parse({});
+    expect(defaults.doubleRent).toBe(true);
+    expect(defaults.vacationCash).toBe(false);
+    expect(defaults.auction).toBe(true);
+    expect(defaults.noRentInPrison).toBe(false);
+    expect(defaults.mortgage).toBe(true);
+    expect(defaults.evenBuild).toBe(true);
+  });
+});
+
