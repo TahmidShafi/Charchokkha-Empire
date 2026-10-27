@@ -1,6 +1,6 @@
 import { randomBytes, randomInt, randomUUID } from 'node:crypto';
 import {
-  type GameState,
+  type GameState as SharedGameState,
   type Player,
   type RoomLifecycleState,
   type RoomSettings,
@@ -8,9 +8,22 @@ import {
 } from '@charchokkha/shared';
 import {
   createInitialGameState,
+  processAcceptTrade,
+  processAuctionBid,
+  processAuctionPass,
+  processBuildHouse,
   processBuyProperty,
+  processCreateTrade,
+  processDeclineProperty,
+  processDeclareBankruptcy,
   processEndTurn,
+  processMortgageProperty,
+  processPayPrisonFine,
+  processRejectTrade,
   processRollDice,
+  processSellHouse,
+  processUnmortgageProperty,
+  type GameState as EngineGameState,
   type RandomSource,
 } from '@charchokkha/game-engine';
 
@@ -40,7 +53,7 @@ export interface ServerRoom {
   players: Map<string, ServerPlayer>; // Keyed by sessionId
   createdAt: number;
   actionQueue: Promise<void>;
-  gameState?: GameState;
+  gameState?: EngineGameState;
 }
 
 export class RoomManager {
@@ -159,6 +172,12 @@ export class RoomManager {
       isPrivate: settings?.isPrivate ?? true,
       allowBots: settings?.allowBots ?? false,
       startingCash: settings?.startingCash ?? 1500,
+      doubleRent: settings?.doubleRent ?? false,
+      vacationCash: settings?.vacationCash ?? false,
+      auction: settings?.auction ?? true,
+      noRentInPrison: settings?.noRentInPrison ?? false,
+      mortgage: settings?.mortgage ?? true,
+      evenBuild: settings?.evenBuild ?? true,
     };
 
     const hostPlayer: ServerPlayer = {
@@ -338,6 +357,24 @@ export class RoomManager {
     if (partial.startingCash !== undefined) {
       room.settings.startingCash = partial.startingCash;
     }
+    if (partial.doubleRent !== undefined) {
+      room.settings.doubleRent = partial.doubleRent;
+    }
+    if (partial.vacationCash !== undefined) {
+      room.settings.vacationCash = partial.vacationCash;
+    }
+    if (partial.auction !== undefined) {
+      room.settings.auction = partial.auction;
+    }
+    if (partial.noRentInPrison !== undefined) {
+      room.settings.noRentInPrison = partial.noRentInPrison;
+    }
+    if (partial.mortgage !== undefined) {
+      room.settings.mortgage = partial.mortgage;
+    }
+    if (partial.evenBuild !== undefined) {
+      room.settings.evenBuild = partial.evenBuild;
+    }
 
     room.sequenceNumber += 1;
     return this.toSnapshot(room);
@@ -424,7 +461,13 @@ export class RoomManager {
     const initialGameState = createInitialGameState(
       orderedPlayers,
       room.settings.startingCash,
-      200
+      200,
+      {
+        doubleRent: room.settings.doubleRent,
+        noRentInPrison: room.settings.noRentInPrison,
+        vacationCash: room.settings.vacationCash,
+        evenBuild: room.settings.evenBuild,
+      }
     );
 
     room.state = 'in_progress';
@@ -534,6 +577,259 @@ export class RoomManager {
   }
 
   /**
+   * Declines property purchase and initiates auction.
+   */
+  public declineProperty(session: GuestSession, roomCode: string): RoomSnapshot {
+    const code = roomCode.trim().toUpperCase();
+    const room = this.rooms.get(code);
+    if (!room || room.state !== 'in_progress' || !room.gameState) {
+      throw new Error('Game is not in progress');
+    }
+
+    const result = processDeclineProperty(room.gameState, session.sessionId);
+    if (!result.success) {
+      throw new Error(result.error?.message ?? 'Failed to decline property');
+    }
+
+    room.gameState = result.state;
+    room.sequenceNumber += 1;
+    return this.toSnapshot(room);
+  }
+
+  /**
+   * Places an auction bid.
+   */
+  public auctionBid(session: GuestSession, roomCode: string, bidAmount: number): RoomSnapshot {
+    const code = roomCode.trim().toUpperCase();
+    const room = this.rooms.get(code);
+    if (!room || room.state !== 'in_progress' || !room.gameState) {
+      throw new Error('Game is not in progress');
+    }
+
+    const result = processAuctionBid(room.gameState, session.sessionId, bidAmount);
+    if (!result.success) {
+      throw new Error(result.error?.message ?? 'Failed to place auction bid');
+    }
+
+    room.gameState = result.state;
+    room.sequenceNumber += 1;
+    return this.toSnapshot(room);
+  }
+
+  /**
+   * Passes on current auction.
+   */
+  public auctionPass(session: GuestSession, roomCode: string): RoomSnapshot {
+    const code = roomCode.trim().toUpperCase();
+    const room = this.rooms.get(code);
+    if (!room || room.state !== 'in_progress' || !room.gameState) {
+      throw new Error('Game is not in progress');
+    }
+
+    const result = processAuctionPass(room.gameState, session.sessionId);
+    if (!result.success) {
+      throw new Error(result.error?.message ?? 'Failed to pass auction');
+    }
+
+    room.gameState = result.state;
+    room.sequenceNumber += 1;
+    return this.toSnapshot(room);
+  }
+
+  /**
+   * Pays $50 prison fine before rolling.
+   */
+  public payPrisonFine(session: GuestSession, roomCode: string): RoomSnapshot {
+    const code = roomCode.trim().toUpperCase();
+    const room = this.rooms.get(code);
+    if (!room || room.state !== 'in_progress' || !room.gameState) {
+      throw new Error('Game is not in progress');
+    }
+
+    const result = processPayPrisonFine(room.gameState, session.sessionId);
+    if (!result.success) {
+      throw new Error(result.error?.message ?? 'Failed to pay prison fine');
+    }
+
+    room.gameState = result.state;
+    room.sequenceNumber += 1;
+    return this.toSnapshot(room);
+  }
+
+  /**
+   * Mortgages an owned property.
+   */
+  public mortgageProperty(session: GuestSession, roomCode: string, spaceId: number): RoomSnapshot {
+    const code = roomCode.trim().toUpperCase();
+    const room = this.rooms.get(code);
+    if (!room || room.state !== 'in_progress' || !room.gameState) {
+      throw new Error('Game is not in progress');
+    }
+
+    const result = processMortgageProperty(room.gameState, session.sessionId, spaceId);
+    if (!result.success) {
+      throw new Error(result.error?.message ?? 'Failed to mortgage property');
+    }
+
+    room.gameState = result.state;
+    room.sequenceNumber += 1;
+    return this.toSnapshot(room);
+  }
+
+  /**
+   * Unmortgages an owned property.
+   */
+  public unmortgageProperty(session: GuestSession, roomCode: string, spaceId: number): RoomSnapshot {
+    const code = roomCode.trim().toUpperCase();
+    const room = this.rooms.get(code);
+    if (!room || room.state !== 'in_progress' || !room.gameState) {
+      throw new Error('Game is not in progress');
+    }
+
+    const result = processUnmortgageProperty(room.gameState, session.sessionId, spaceId);
+    if (!result.success) {
+      throw new Error(result.error?.message ?? 'Failed to unmortgage property');
+    }
+
+    room.gameState = result.state;
+    room.sequenceNumber += 1;
+    return this.toSnapshot(room);
+  }
+
+  /**
+   * Builds house or hotel on owned property.
+   */
+  public buildHouse(session: GuestSession, roomCode: string, spaceId: number): RoomSnapshot {
+    const code = roomCode.trim().toUpperCase();
+    const room = this.rooms.get(code);
+    if (!room || room.state !== 'in_progress' || !room.gameState) {
+      throw new Error('Game is not in progress');
+    }
+
+    const result = processBuildHouse(room.gameState, session.sessionId, spaceId);
+    if (!result.success) {
+      throw new Error(result.error?.message ?? 'Failed to build house');
+    }
+
+    room.gameState = result.state;
+    room.sequenceNumber += 1;
+    return this.toSnapshot(room);
+  }
+
+  /**
+   * Sells house or hotel back to bank.
+   */
+  public sellHouse(session: GuestSession, roomCode: string, spaceId: number): RoomSnapshot {
+    const code = roomCode.trim().toUpperCase();
+    const room = this.rooms.get(code);
+    if (!room || room.state !== 'in_progress' || !room.gameState) {
+      throw new Error('Game is not in progress');
+    }
+
+    const result = processSellHouse(room.gameState, session.sessionId, spaceId);
+    if (!result.success) {
+      throw new Error(result.error?.message ?? 'Failed to sell house');
+    }
+
+    room.gameState = result.state;
+    room.sequenceNumber += 1;
+    return this.toSnapshot(room);
+  }
+
+  /**
+   * Creates a trade offer to another player.
+   */
+  public createTrade(
+    session: GuestSession,
+    roomCode: string,
+    trade: {
+      receiverId: string;
+      offeredCash: number;
+      offeredPropertyIds: number[];
+      requestedCash: number;
+      requestedPropertyIds: number[];
+    }
+  ): RoomSnapshot {
+    const code = roomCode.trim().toUpperCase();
+    const room = this.rooms.get(code);
+    if (!room || room.state !== 'in_progress' || !room.gameState) {
+      throw new Error('Game is not in progress');
+    }
+
+    const result = processCreateTrade(room.gameState, session.sessionId, trade);
+    if (!result.success) {
+      throw new Error(result.error?.message ?? 'Failed to create trade offer');
+    }
+
+    room.gameState = result.state;
+    room.sequenceNumber += 1;
+    return this.toSnapshot(room);
+  }
+
+  /**
+   * Accepts active trade offer.
+   */
+  public acceptTrade(session: GuestSession, roomCode: string): RoomSnapshot {
+    const code = roomCode.trim().toUpperCase();
+    const room = this.rooms.get(code);
+    if (!room || room.state !== 'in_progress' || !room.gameState) {
+      throw new Error('Game is not in progress');
+    }
+
+    const result = processAcceptTrade(room.gameState, session.sessionId);
+    if (!result.success) {
+      throw new Error(result.error?.message ?? 'Failed to accept trade offer');
+    }
+
+    room.gameState = result.state;
+    room.sequenceNumber += 1;
+    return this.toSnapshot(room);
+  }
+
+  /**
+   * Rejects or cancels active trade offer.
+   */
+  public rejectTrade(session: GuestSession, roomCode: string): RoomSnapshot {
+    const code = roomCode.trim().toUpperCase();
+    const room = this.rooms.get(code);
+    if (!room || room.state !== 'in_progress' || !room.gameState) {
+      throw new Error('Game is not in progress');
+    }
+
+    const result = processRejectTrade(room.gameState, session.sessionId);
+    if (!result.success) {
+      throw new Error(result.error?.message ?? 'Failed to reject trade offer');
+    }
+
+    room.gameState = result.state;
+    room.sequenceNumber += 1;
+    return this.toSnapshot(room);
+  }
+
+  /**
+   * Declares bankruptcy, transferring assets to creditor or bank.
+   */
+  public declareBankruptcy(session: GuestSession, roomCode: string, creditorId?: string): RoomSnapshot {
+    const code = roomCode.trim().toUpperCase();
+    const room = this.rooms.get(code);
+    if (!room || room.state !== 'in_progress' || !room.gameState) {
+      throw new Error('Game is not in progress');
+    }
+
+    const result = processDeclareBankruptcy(room.gameState, session.sessionId, creditorId);
+    if (!result.success) {
+      throw new Error(result.error?.message ?? 'Failed to declare bankruptcy');
+    }
+
+    room.gameState = result.state;
+    if (result.state.phase === 'finished') {
+      room.state = 'finished';
+    }
+    room.sequenceNumber += 1;
+    return this.toSnapshot(room);
+  }
+
+  /**
    * Converts authoritative ServerRoom to safe, shared RoomSnapshot.
    */
   private toSnapshot(room: ServerRoom): RoomSnapshot {
@@ -546,7 +842,7 @@ export class RoomManager {
       seatIndex: p.seatIndex,
     }));
 
-    let safeGameState: GameState | undefined = undefined;
+    let safeGameState: SharedGameState | undefined = undefined;
     if (room.gameState) {
       safeGameState = {
         ...room.gameState,

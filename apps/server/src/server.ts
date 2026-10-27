@@ -14,6 +14,18 @@ import {
   StartGamePayloadSchema,
   RollDicePayloadSchema,
   BuyPropertyPayloadSchema,
+  DeclinePropertyPayloadSchema,
+  AuctionBidPayloadSchema,
+  AuctionPassPayloadSchema,
+  PayPrisonFinePayloadSchema,
+  MortgagePropertyPayloadSchema,
+  UnmortgagePropertyPayloadSchema,
+  BuildHousePayloadSchema,
+  SellHousePayloadSchema,
+  TradeCreatePayloadSchema,
+  TradeAcceptPayloadSchema,
+  TradeRejectPayloadSchema,
+  DeclareBankruptcyPayloadSchema,
   EndTurnPayloadSchema,
   type ChatMessageBroadcast,
   type HealthCheckResponse,
@@ -497,6 +509,480 @@ export function createAppServer(options: ServerOptions = {}) {
           else if (msg.includes('already owned')) code = 'ALREADY_OWNED';
           else if (msg.includes('cannot be purchased')) code = 'NOT_PURCHASABLE';
           const err: SocketError = { code, message: msg };
+          if (typeof ack === 'function') ack({ ok: false, error: err });
+        }
+      }
+    );
+
+    // --- Game: Decline Property (Start Auction) ---
+    socket.on(
+      SOCKET_EVENTS.GAME_DECLINE_PROPERTY,
+      async (rawPayload: unknown, ack?: (response: SocketAck<RoomSnapshot>) => void) => {
+        const parsed = DeclinePropertyPayloadSchema.safeParse(rawPayload);
+        if (!parsed.success) {
+          const err: SocketError = {
+            code: 'INVALID_PAYLOAD',
+            message: 'Validation failed: ' + parsed.error.issues.map((i) => i.message).join(', '),
+            details: parsed.error.flatten(),
+          };
+          if (typeof ack === 'function') ack({ ok: false, error: err });
+          return;
+        }
+
+        const roomCode = parsed.data.roomCode.trim().toUpperCase();
+
+        try {
+          const snapshot = await roomManager.enqueueRoomAction(roomCode, () => {
+            return roomManager.declineProperty(session, roomCode);
+          });
+
+          if (typeof ack === 'function') ack({ ok: true, data: snapshot });
+          io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.ROOM_UPDATED, snapshot);
+          if (snapshot.gameState) {
+            io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.GAME_STATE_UPDATED, {
+              roomCode: snapshot.code,
+              sequenceNumber: snapshot.sequenceNumber,
+              gameState: snapshot.gameState,
+            });
+          }
+        } catch (error: unknown) {
+          const msg = error instanceof Error ? error.message : 'Failed to decline property';
+          const err: SocketError = { code: 'DECLINE_PROPERTY_FAILED', message: msg };
+          if (typeof ack === 'function') ack({ ok: false, error: err });
+        }
+      }
+    );
+
+    // --- Game: Auction Bid ---
+    socket.on(
+      SOCKET_EVENTS.GAME_AUCTION_BID,
+      async (rawPayload: unknown, ack?: (response: SocketAck<RoomSnapshot>) => void) => {
+        const parsed = AuctionBidPayloadSchema.safeParse(rawPayload);
+        if (!parsed.success) {
+          const err: SocketError = {
+            code: 'INVALID_PAYLOAD',
+            message: 'Validation failed: ' + parsed.error.issues.map((i) => i.message).join(', '),
+            details: parsed.error.flatten(),
+          };
+          if (typeof ack === 'function') ack({ ok: false, error: err });
+          return;
+        }
+
+        const roomCode = parsed.data.roomCode.trim().toUpperCase();
+
+        try {
+          const snapshot = await roomManager.enqueueRoomAction(roomCode, () => {
+            return roomManager.auctionBid(session, roomCode, parsed.data.bidAmount);
+          });
+
+          if (typeof ack === 'function') ack({ ok: true, data: snapshot });
+          io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.ROOM_UPDATED, snapshot);
+          if (snapshot.gameState) {
+            io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.GAME_STATE_UPDATED, {
+              roomCode: snapshot.code,
+              sequenceNumber: snapshot.sequenceNumber,
+              gameState: snapshot.gameState,
+            });
+          }
+        } catch (error: unknown) {
+          const msg = error instanceof Error ? error.message : 'Failed to place auction bid';
+          const err: SocketError = { code: 'AUCTION_BID_FAILED', message: msg };
+          if (typeof ack === 'function') ack({ ok: false, error: err });
+        }
+      }
+    );
+
+    // --- Game: Auction Pass ---
+    socket.on(
+      SOCKET_EVENTS.GAME_AUCTION_PASS,
+      async (rawPayload: unknown, ack?: (response: SocketAck<RoomSnapshot>) => void) => {
+        const parsed = AuctionPassPayloadSchema.safeParse(rawPayload);
+        if (!parsed.success) {
+          const err: SocketError = {
+            code: 'INVALID_PAYLOAD',
+            message: 'Validation failed: ' + parsed.error.issues.map((i) => i.message).join(', '),
+            details: parsed.error.flatten(),
+          };
+          if (typeof ack === 'function') ack({ ok: false, error: err });
+          return;
+        }
+
+        const roomCode = parsed.data.roomCode.trim().toUpperCase();
+
+        try {
+          const snapshot = await roomManager.enqueueRoomAction(roomCode, () => {
+            return roomManager.auctionPass(session, roomCode);
+          });
+
+          if (typeof ack === 'function') ack({ ok: true, data: snapshot });
+          io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.ROOM_UPDATED, snapshot);
+          if (snapshot.gameState) {
+            io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.GAME_STATE_UPDATED, {
+              roomCode: snapshot.code,
+              sequenceNumber: snapshot.sequenceNumber,
+              gameState: snapshot.gameState,
+            });
+          }
+        } catch (error: unknown) {
+          const msg = error instanceof Error ? error.message : 'Failed to pass auction';
+          const err: SocketError = { code: 'AUCTION_PASS_FAILED', message: msg };
+          if (typeof ack === 'function') ack({ ok: false, error: err });
+        }
+      }
+    );
+
+    // --- Game: Pay Prison Fine ---
+    socket.on(
+      SOCKET_EVENTS.GAME_PAY_PRISON_FINE,
+      async (rawPayload: unknown, ack?: (response: SocketAck<RoomSnapshot>) => void) => {
+        const parsed = PayPrisonFinePayloadSchema.safeParse(rawPayload);
+        if (!parsed.success) {
+          const err: SocketError = {
+            code: 'INVALID_PAYLOAD',
+            message: 'Validation failed: ' + parsed.error.issues.map((i) => i.message).join(', '),
+            details: parsed.error.flatten(),
+          };
+          if (typeof ack === 'function') ack({ ok: false, error: err });
+          return;
+        }
+
+        const roomCode = parsed.data.roomCode.trim().toUpperCase();
+
+        try {
+          const snapshot = await roomManager.enqueueRoomAction(roomCode, () => {
+            return roomManager.payPrisonFine(session, roomCode);
+          });
+
+          if (typeof ack === 'function') ack({ ok: true, data: snapshot });
+          io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.ROOM_UPDATED, snapshot);
+          if (snapshot.gameState) {
+            io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.GAME_STATE_UPDATED, {
+              roomCode: snapshot.code,
+              sequenceNumber: snapshot.sequenceNumber,
+              gameState: snapshot.gameState,
+            });
+          }
+        } catch (error: unknown) {
+          const msg = error instanceof Error ? error.message : 'Failed to pay prison fine';
+          const err: SocketError = { code: 'PAY_PRISON_FINE_FAILED', message: msg };
+          if (typeof ack === 'function') ack({ ok: false, error: err });
+        }
+      }
+    );
+
+    // --- Game: Mortgage Property ---
+    socket.on(
+      SOCKET_EVENTS.GAME_MORTGAGE_PROPERTY,
+      async (rawPayload: unknown, ack?: (response: SocketAck<RoomSnapshot>) => void) => {
+        const parsed = MortgagePropertyPayloadSchema.safeParse(rawPayload);
+        if (!parsed.success) {
+          const err: SocketError = {
+            code: 'INVALID_PAYLOAD',
+            message: 'Validation failed: ' + parsed.error.issues.map((i) => i.message).join(', '),
+            details: parsed.error.flatten(),
+          };
+          if (typeof ack === 'function') ack({ ok: false, error: err });
+          return;
+        }
+
+        const roomCode = parsed.data.roomCode.trim().toUpperCase();
+
+        try {
+          const snapshot = await roomManager.enqueueRoomAction(roomCode, () => {
+            return roomManager.mortgageProperty(session, roomCode, parsed.data.spaceId);
+          });
+
+          if (typeof ack === 'function') ack({ ok: true, data: snapshot });
+          io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.ROOM_UPDATED, snapshot);
+          if (snapshot.gameState) {
+            io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.GAME_STATE_UPDATED, {
+              roomCode: snapshot.code,
+              sequenceNumber: snapshot.sequenceNumber,
+              gameState: snapshot.gameState,
+            });
+          }
+        } catch (error: unknown) {
+          const msg = error instanceof Error ? error.message : 'Failed to mortgage property';
+          const err: SocketError = { code: 'MORTGAGE_PROPERTY_FAILED', message: msg };
+          if (typeof ack === 'function') ack({ ok: false, error: err });
+        }
+      }
+    );
+
+    // --- Game: Unmortgage Property ---
+    socket.on(
+      SOCKET_EVENTS.GAME_UNMORTGAGE_PROPERTY,
+      async (rawPayload: unknown, ack?: (response: SocketAck<RoomSnapshot>) => void) => {
+        const parsed = UnmortgagePropertyPayloadSchema.safeParse(rawPayload);
+        if (!parsed.success) {
+          const err: SocketError = {
+            code: 'INVALID_PAYLOAD',
+            message: 'Validation failed: ' + parsed.error.issues.map((i) => i.message).join(', '),
+            details: parsed.error.flatten(),
+          };
+          if (typeof ack === 'function') ack({ ok: false, error: err });
+          return;
+        }
+
+        const roomCode = parsed.data.roomCode.trim().toUpperCase();
+
+        try {
+          const snapshot = await roomManager.enqueueRoomAction(roomCode, () => {
+            return roomManager.unmortgageProperty(session, roomCode, parsed.data.spaceId);
+          });
+
+          if (typeof ack === 'function') ack({ ok: true, data: snapshot });
+          io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.ROOM_UPDATED, snapshot);
+          if (snapshot.gameState) {
+            io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.GAME_STATE_UPDATED, {
+              roomCode: snapshot.code,
+              sequenceNumber: snapshot.sequenceNumber,
+              gameState: snapshot.gameState,
+            });
+          }
+        } catch (error: unknown) {
+          const msg = error instanceof Error ? error.message : 'Failed to unmortgage property';
+          const err: SocketError = { code: 'UNMORTGAGE_PROPERTY_FAILED', message: msg };
+          if (typeof ack === 'function') ack({ ok: false, error: err });
+        }
+      }
+    );
+
+    // --- Game: Build House ---
+    socket.on(
+      SOCKET_EVENTS.GAME_BUILD_HOUSE,
+      async (rawPayload: unknown, ack?: (response: SocketAck<RoomSnapshot>) => void) => {
+        const parsed = BuildHousePayloadSchema.safeParse(rawPayload);
+        if (!parsed.success) {
+          const err: SocketError = {
+            code: 'INVALID_PAYLOAD',
+            message: 'Validation failed: ' + parsed.error.issues.map((i) => i.message).join(', '),
+            details: parsed.error.flatten(),
+          };
+          if (typeof ack === 'function') ack({ ok: false, error: err });
+          return;
+        }
+
+        const roomCode = parsed.data.roomCode.trim().toUpperCase();
+
+        try {
+          const snapshot = await roomManager.enqueueRoomAction(roomCode, () => {
+            return roomManager.buildHouse(session, roomCode, parsed.data.spaceId);
+          });
+
+          if (typeof ack === 'function') ack({ ok: true, data: snapshot });
+          io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.ROOM_UPDATED, snapshot);
+          if (snapshot.gameState) {
+            io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.GAME_STATE_UPDATED, {
+              roomCode: snapshot.code,
+              sequenceNumber: snapshot.sequenceNumber,
+              gameState: snapshot.gameState,
+            });
+          }
+        } catch (error: unknown) {
+          const msg = error instanceof Error ? error.message : 'Failed to build house';
+          const err: SocketError = { code: 'BUILD_HOUSE_FAILED', message: msg };
+          if (typeof ack === 'function') ack({ ok: false, error: err });
+        }
+      }
+    );
+
+    // --- Game: Sell House ---
+    socket.on(
+      SOCKET_EVENTS.GAME_SELL_HOUSE,
+      async (rawPayload: unknown, ack?: (response: SocketAck<RoomSnapshot>) => void) => {
+        const parsed = SellHousePayloadSchema.safeParse(rawPayload);
+        if (!parsed.success) {
+          const err: SocketError = {
+            code: 'INVALID_PAYLOAD',
+            message: 'Validation failed: ' + parsed.error.issues.map((i) => i.message).join(', '),
+            details: parsed.error.flatten(),
+          };
+          if (typeof ack === 'function') ack({ ok: false, error: err });
+          return;
+        }
+
+        const roomCode = parsed.data.roomCode.trim().toUpperCase();
+
+        try {
+          const snapshot = await roomManager.enqueueRoomAction(roomCode, () => {
+            return roomManager.sellHouse(session, roomCode, parsed.data.spaceId);
+          });
+
+          if (typeof ack === 'function') ack({ ok: true, data: snapshot });
+          io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.ROOM_UPDATED, snapshot);
+          if (snapshot.gameState) {
+            io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.GAME_STATE_UPDATED, {
+              roomCode: snapshot.code,
+              sequenceNumber: snapshot.sequenceNumber,
+              gameState: snapshot.gameState,
+            });
+          }
+        } catch (error: unknown) {
+          const msg = error instanceof Error ? error.message : 'Failed to sell house';
+          const err: SocketError = { code: 'SELL_HOUSE_FAILED', message: msg };
+          if (typeof ack === 'function') ack({ ok: false, error: err });
+        }
+      }
+    );
+
+    // --- Game: Create Trade Offer ---
+    socket.on(
+      SOCKET_EVENTS.GAME_TRADE_CREATE,
+      async (rawPayload: unknown, ack?: (response: SocketAck<RoomSnapshot>) => void) => {
+        const parsed = TradeCreatePayloadSchema.safeParse(rawPayload);
+        if (!parsed.success) {
+          const err: SocketError = {
+            code: 'INVALID_PAYLOAD',
+            message: 'Validation failed: ' + parsed.error.issues.map((i) => i.message).join(', '),
+            details: parsed.error.flatten(),
+          };
+          if (typeof ack === 'function') ack({ ok: false, error: err });
+          return;
+        }
+
+        const roomCode = parsed.data.roomCode.trim().toUpperCase();
+
+        try {
+          const snapshot = await roomManager.enqueueRoomAction(roomCode, () => {
+            return roomManager.createTrade(session, roomCode, {
+              receiverId: parsed.data.receiverId,
+              offeredCash: parsed.data.offeredCash,
+              offeredPropertyIds: parsed.data.offeredPropertyIds,
+              requestedCash: parsed.data.requestedCash,
+              requestedPropertyIds: parsed.data.requestedPropertyIds,
+            });
+          });
+
+          if (typeof ack === 'function') ack({ ok: true, data: snapshot });
+          io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.ROOM_UPDATED, snapshot);
+          if (snapshot.gameState) {
+            io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.GAME_STATE_UPDATED, {
+              roomCode: snapshot.code,
+              sequenceNumber: snapshot.sequenceNumber,
+              gameState: snapshot.gameState,
+            });
+          }
+        } catch (error: unknown) {
+          const msg = error instanceof Error ? error.message : 'Failed to create trade offer';
+          const err: SocketError = { code: 'TRADE_CREATE_FAILED', message: msg };
+          if (typeof ack === 'function') ack({ ok: false, error: err });
+        }
+      }
+    );
+
+    // --- Game: Accept Trade Offer ---
+    socket.on(
+      SOCKET_EVENTS.GAME_TRADE_ACCEPT,
+      async (rawPayload: unknown, ack?: (response: SocketAck<RoomSnapshot>) => void) => {
+        const parsed = TradeAcceptPayloadSchema.safeParse(rawPayload);
+        if (!parsed.success) {
+          const err: SocketError = {
+            code: 'INVALID_PAYLOAD',
+            message: 'Validation failed: ' + parsed.error.issues.map((i) => i.message).join(', '),
+            details: parsed.error.flatten(),
+          };
+          if (typeof ack === 'function') ack({ ok: false, error: err });
+          return;
+        }
+
+        const roomCode = parsed.data.roomCode.trim().toUpperCase();
+
+        try {
+          const snapshot = await roomManager.enqueueRoomAction(roomCode, () => {
+            return roomManager.acceptTrade(session, roomCode);
+          });
+
+          if (typeof ack === 'function') ack({ ok: true, data: snapshot });
+          io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.ROOM_UPDATED, snapshot);
+          if (snapshot.gameState) {
+            io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.GAME_STATE_UPDATED, {
+              roomCode: snapshot.code,
+              sequenceNumber: snapshot.sequenceNumber,
+              gameState: snapshot.gameState,
+            });
+          }
+        } catch (error: unknown) {
+          const msg = error instanceof Error ? error.message : 'Failed to accept trade offer';
+          const err: SocketError = { code: 'TRADE_ACCEPT_FAILED', message: msg };
+          if (typeof ack === 'function') ack({ ok: false, error: err });
+        }
+      }
+    );
+
+    // --- Game: Reject Trade Offer ---
+    socket.on(
+      SOCKET_EVENTS.GAME_TRADE_REJECT,
+      async (rawPayload: unknown, ack?: (response: SocketAck<RoomSnapshot>) => void) => {
+        const parsed = TradeRejectPayloadSchema.safeParse(rawPayload);
+        if (!parsed.success) {
+          const err: SocketError = {
+            code: 'INVALID_PAYLOAD',
+            message: 'Validation failed: ' + parsed.error.issues.map((i) => i.message).join(', '),
+            details: parsed.error.flatten(),
+          };
+          if (typeof ack === 'function') ack({ ok: false, error: err });
+          return;
+        }
+
+        const roomCode = parsed.data.roomCode.trim().toUpperCase();
+
+        try {
+          const snapshot = await roomManager.enqueueRoomAction(roomCode, () => {
+            return roomManager.rejectTrade(session, roomCode);
+          });
+
+          if (typeof ack === 'function') ack({ ok: true, data: snapshot });
+          io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.ROOM_UPDATED, snapshot);
+          if (snapshot.gameState) {
+            io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.GAME_STATE_UPDATED, {
+              roomCode: snapshot.code,
+              sequenceNumber: snapshot.sequenceNumber,
+              gameState: snapshot.gameState,
+            });
+          }
+        } catch (error: unknown) {
+          const msg = error instanceof Error ? error.message : 'Failed to reject trade offer';
+          const err: SocketError = { code: 'TRADE_REJECT_FAILED', message: msg };
+          if (typeof ack === 'function') ack({ ok: false, error: err });
+        }
+      }
+    );
+
+    // --- Game: Declare Bankruptcy ---
+    socket.on(
+      SOCKET_EVENTS.GAME_DECLARE_BANKRUPTCY,
+      async (rawPayload: unknown, ack?: (response: SocketAck<RoomSnapshot>) => void) => {
+        const parsed = DeclareBankruptcyPayloadSchema.safeParse(rawPayload);
+        if (!parsed.success) {
+          const err: SocketError = {
+            code: 'INVALID_PAYLOAD',
+            message: 'Validation failed: ' + parsed.error.issues.map((i) => i.message).join(', '),
+            details: parsed.error.flatten(),
+          };
+          if (typeof ack === 'function') ack({ ok: false, error: err });
+          return;
+        }
+
+        const roomCode = parsed.data.roomCode.trim().toUpperCase();
+
+        try {
+          const snapshot = await roomManager.enqueueRoomAction(roomCode, () => {
+            return roomManager.declareBankruptcy(session, roomCode, parsed.data.creditorId);
+          });
+
+          if (typeof ack === 'function') ack({ ok: true, data: snapshot });
+          io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.ROOM_UPDATED, snapshot);
+          if (snapshot.gameState) {
+            io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.GAME_STATE_UPDATED, {
+              roomCode: snapshot.code,
+              sequenceNumber: snapshot.sequenceNumber,
+              gameState: snapshot.gameState,
+            });
+          }
+        } catch (error: unknown) {
+          const msg = error instanceof Error ? error.message : 'Failed to declare bankruptcy';
+          const err: SocketError = { code: 'DECLARE_BANKRUPTCY_FAILED', message: msg };
           if (typeof ack === 'function') ack({ ok: false, error: err });
         }
       }
