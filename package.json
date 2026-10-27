@@ -1,0 +1,29 @@
+{
+  "name": "charchokkha-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "prepare": "pnpm run build:packages",
+    "build:packages": "pnpm --filter @charchokkha/shared --filter @charchokkha/game-engine build",
+    "build": "pnpm run build:packages && pnpm --filter @charchokkha/server --filter @charchokkha/web build",
+    "typecheck": "pnpm run build:packages && pnpm -r run typecheck",
+    "test": "pnpm run build:packages && pnpm -r run test && vitest run",
+    "test:unit": "pnpm run build:packages && pnpm -r run test",
+    "test:smoke": "pnpm run build:packages && vitest run tests/smoke.test.ts",
+    "dev": "pnpm --filter @charchokkha/server --filter @charchokkha/web --parallel dev",
+    "dev:server": "pnpm --filter @charchokkha/server dev",
+    "dev:web": "pnpm --filter @charchokkha/web dev",
+    "start:server": "pnpm --filter @charchokkha/server start",
+    "preview:web": "pnpm --filter @charchokkha/web preview"
+  },
+  "devDependencies": {
+    "@charchokkha/game-engine": "workspace:*",
+    "@charchokkha/shared": "workspace:*",
+    "@types/node": "^22.10.2",
+    "socket.io-client": "^4.8.1",
+    "tsup": "^8.3.5",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}
