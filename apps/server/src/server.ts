@@ -1,0 +1,617 @@
+import http from 'node:http';
+import { Server as SocketIOServer, type Socket } from 'socket.io';
+import {
+  ChatMessageBroadcastSchema,
+  CreateRoomPayloadSchema,
+  GetSnapshotPayloadSchema,
+  HealthCheckResponseSchema,
+  JoinRoomPayloadSchema,
+  LeaveRoomPayloadSchema,
+  PingPayloadSchema,
+  SOCKET_EVENTS,
+  SendChatPayloadSchema,
+  UpdateSettingsPayloadSchema,
+  StartGamePayloadSchema,
+  RollDicePayloadSchema,
+  BuyPropertyPayloadSchema,
+  EndTurnPayloadSchema,
+  type ChatMessageBroadcast,
+  type HealthCheckResponse,
+  type PongPayload,
+  type RoomSnapshot,
+  type SessionAuthenticatedPayload,
+  type SocketAck,
+  type SocketError,
+} from '@charchokkha/shared';
+import { RoomManager } from './roomManager.js';
+
+export interface ServerOptions {
+  port?: number;
+  host?: string;
+  allowedOrigins?: string[];
+}
+
+export function createAppServer(options: ServerOptions = {}) {
+  const allowedOrigins = options.allowedOrigins ?? [
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+  ];
+
+  const startTime = Date.now();
+  const roomManager = new RoomManager();
+
+  const httpServer = http.createServer((req, res) => {
+    const origin = req.headers.origin;
+    if (origin && (allowedOrigins.includes(origin) || allowedOrigins.includes('*'))) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+    }
+
+    if (req.method === 'OPTIONS') {
+      res.writeHead(204);
+      res.end();
+      return;
+    }
+
+    const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`);
+
+    if (req.method === 'GET' && (url.pathname === '/health' || url.pathname === '/api/health')) {
+      const healthData: HealthCheckResponse = {
+        status: 'ok',
+        service: 'charchokkha-server',
+        uptime: Math.round((Date.now() - startTime) / 1000),
+        timestamp: new Date().toISOString(),
+      };
+
+      const validation = HealthCheckResponseSchema.safeParse(healthData);
+      if (!validation.success) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Internal health check validation failed' }));
+        return;
+      }
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(validation.data));
+      return;
+    }
+
+    res.writeHead(404, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Not Found' }));
+  });
+
+  const io = new SocketIOServer(httpServer, {
+    cors: {
+      origin: allowedOrigins,
+      methods: ['GET', 'POST'],
+      credentials: true,
+    },
+    maxHttpBufferSize: 1e6, // 1MB maximum inbound payload size
+  });
+
+  io.on('connection', (socket: Socket) => {
+    // 1. Authenticate guest session from handshake auth
+    const clientAuthToken = typeof socket.handshake.auth?.token === 'string'
+      ? socket.handshake.auth.token.trim()
+      : undefined;
+
+    const session = roomManager.getOrCreateSession(clientAuthToken, socket.id);
+
+    // Never log guest tokens to console or analytics
+    // eslint-disable-next-line no-console
+    console.log(`[Socket.IO] Client connected: socket_id=${socket.id} session_id=${session.sessionId}`);
+
+    // Inform client of authenticated guest identity
+    const authPayload: SessionAuthenticatedPayload = {
+      sessionId: session.sessionId,
+      playerId: session.sessionId,
+      token: session.token,
+      nickname: session.nickname,
+      currentRoomCode: session.currentRoomCode,
+    };
+    socket.emit(SOCKET_EVENTS.SESSION_AUTHENTICATED, authPayload);
+
+    // If session was already in a room, re-attach socket to room
+    if (session.currentRoomCode) {
+      try {
+        const snapshot = roomManager.getSnapshot(session.currentRoomCode);
+        socket.join(`room:${snapshot.code}`);
+        socket.emit(SOCKET_EVENTS.ROOM_SNAPSHOT, snapshot);
+        io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.ROOM_UPDATED, snapshot);
+        io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.ROOM_PLAYER_RECONNECTED, {
+          playerId: session.sessionId,
+          nickname: session.nickname,
+        });
+      } catch {
+        session.currentRoomCode = undefined;
+      }
+    }
+
+    // --- Smoke Ping Handlers (Preserved from Milestone 1) ---
+    const handlePing = (
+      rawPayload: unknown,
+      ack?: (response: SocketAck<PongPayload>) => void
+    ) => {
+      const parseResult = PingPayloadSchema.safeParse(rawPayload);
+      if (!parseResult.success) {
+        const errorResponse: SocketError = {
+          code: 'INVALID_PAYLOAD',
+          message: 'Payload validation failed',
+          details: parseResult.error.flatten(),
+        };
+        if (typeof ack === 'function') ack({ ok: false, error: errorResponse });
+        socket.emit('error', errorResponse);
+        return;
+      }
+
+      const pongResponse: PongPayload = {
+        reply: 'pong',
+        receivedAt: Date.now(),
+        echoMessage: parseResult.data.message,
+      };
+
+      if (typeof ack === 'function') ack({ ok: true, data: pongResponse });
+      socket.emit(SOCKET_EVENTS.SMOKE_PONG, pongResponse);
+    };
+
+    socket.on(SOCKET_EVENTS.SMOKE_PING, handlePing);
+    socket.on('ping', handlePing);
+
+    // --- Room: Create ---
+    socket.on(
+      SOCKET_EVENTS.ROOM_CREATE,
+      (rawPayload: unknown, ack?: (response: SocketAck<RoomSnapshot>) => void) => {
+        const parsed = CreateRoomPayloadSchema.safeParse(rawPayload);
+        if (!parsed.success) {
+          const err: SocketError = {
+            code: 'INVALID_PAYLOAD',
+            message: 'Validation failed: ' + parsed.error.issues.map((i) => i.message).join(', '),
+            details: parsed.error.flatten(),
+          };
+          if (typeof ack === 'function') ack({ ok: false, error: err });
+          return;
+        }
+
+        try {
+          const snapshot = roomManager.createRoom(
+            session,
+            parsed.data.nickname,
+            parsed.data.avatar,
+            parsed.data.settings
+          );
+
+          socket.join(`room:${snapshot.code}`);
+
+          if (typeof ack === 'function') {
+            ack({ ok: true, data: snapshot });
+          }
+          socket.emit(SOCKET_EVENTS.ROOM_SNAPSHOT, snapshot);
+        } catch (error: unknown) {
+          const msg = error instanceof Error ? error.message : 'Failed to create room';
+          const err: SocketError = { code: 'ROOM_CREATE_FAILED', message: msg };
+          if (typeof ack === 'function') ack({ ok: false, error: err });
+        }
+      }
+    );
+
+    // --- Room: Join ---
+    socket.on(
+      SOCKET_EVENTS.ROOM_JOIN,
+      async (rawPayload: unknown, ack?: (response: SocketAck<RoomSnapshot>) => void) => {
+        const parsed = JoinRoomPayloadSchema.safeParse(rawPayload);
+        if (!parsed.success) {
+          const err: SocketError = {
+            code: 'INVALID_PAYLOAD',
+            message: 'Validation failed: ' + parsed.error.issues.map((i) => i.message).join(', '),
+            details: parsed.error.flatten(),
+          };
+          if (typeof ack === 'function') ack({ ok: false, error: err });
+          return;
+        }
+
+        const roomCode = parsed.data.roomCode.trim().toUpperCase();
+
+        try {
+          const room = roomManager.getRoom(roomCode);
+          if (!room) {
+            const err: SocketError = { code: 'ROOM_NOT_FOUND', message: `Room ${roomCode} does not exist` };
+            if (typeof ack === 'function') ack({ ok: false, error: err });
+            return;
+          }
+
+          // Apply join through per-room action queue
+          const { snapshot, isReconnect } = await roomManager.enqueueRoomAction(roomCode, () => {
+            return roomManager.joinRoom(
+              session,
+              roomCode,
+              parsed.data.nickname,
+              parsed.data.avatar
+            );
+          });
+
+          socket.join(`room:${snapshot.code}`);
+
+          if (typeof ack === 'function') {
+            ack({ ok: true, data: snapshot });
+          }
+
+          socket.emit(SOCKET_EVENTS.ROOM_SNAPSHOT, snapshot);
+          io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.ROOM_UPDATED, snapshot);
+
+          if (isReconnect) {
+            io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.ROOM_PLAYER_RECONNECTED, {
+              playerId: session.sessionId,
+              nickname: session.nickname,
+            });
+          } else {
+            io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.ROOM_PLAYER_JOINED, {
+              playerId: session.sessionId,
+              nickname: session.nickname,
+            });
+          }
+        } catch (error: unknown) {
+          const msg = error instanceof Error ? error.message : 'Failed to join room';
+          const code = msg.includes('capacity') ? 'ROOM_FULL' : 'ROOM_JOIN_FAILED';
+          const err: SocketError = { code, message: msg };
+          if (typeof ack === 'function') ack({ ok: false, error: err });
+        }
+      }
+    );
+
+    // --- Room: Leave ---
+    socket.on(
+      SOCKET_EVENTS.ROOM_LEAVE,
+      async (rawPayload: unknown, ack?: (response: SocketAck<{ leftCode: string }>) => void) => {
+        const parsed = LeaveRoomPayloadSchema.safeParse(rawPayload ?? {});
+        if (!parsed.success) {
+          const err: SocketError = { code: 'INVALID_PAYLOAD', message: 'Invalid leave payload' };
+          if (typeof ack === 'function') ack({ ok: false, error: err });
+          return;
+        }
+
+        const targetCode = parsed.data.roomCode ?? session.currentRoomCode;
+        if (!targetCode) {
+          if (typeof ack === 'function') ack({ ok: true, data: { leftCode: '' } });
+          return;
+        }
+
+        try {
+          const { leftCode, snapshot } = await roomManager.enqueueRoomAction(targetCode, () => {
+            return roomManager.leaveRoom(session, targetCode);
+          });
+
+          socket.leave(`room:${leftCode}`);
+
+          if (typeof ack === 'function') {
+            ack({ ok: true, data: { leftCode } });
+          }
+
+          if (snapshot) {
+            io.to(`room:${leftCode}`).emit(SOCKET_EVENTS.ROOM_UPDATED, snapshot);
+            io.to(`room:${leftCode}`).emit(SOCKET_EVENTS.ROOM_PLAYER_LEFT, {
+              playerId: session.sessionId,
+              nickname: session.nickname,
+            });
+          }
+        } catch {
+          if (typeof ack === 'function') ack({ ok: true, data: { leftCode: targetCode } });
+        }
+      }
+    );
+
+    // --- Room: Update Settings (Host Only) ---
+    socket.on(
+      SOCKET_EVENTS.ROOM_UPDATE_SETTINGS,
+      async (rawPayload: unknown, ack?: (response: SocketAck<RoomSnapshot>) => void) => {
+        const parsed = UpdateSettingsPayloadSchema.safeParse(rawPayload);
+        if (!parsed.success) {
+          const err: SocketError = {
+            code: 'INVALID_PAYLOAD',
+            message: 'Validation failed: ' + parsed.error.issues.map((i) => i.message).join(', '),
+            details: parsed.error.flatten(),
+          };
+          if (typeof ack === 'function') ack({ ok: false, error: err });
+          return;
+        }
+
+        const roomCode = parsed.data.roomCode.trim().toUpperCase();
+
+        try {
+          const updatedSnapshot = await roomManager.enqueueRoomAction(roomCode, () => {
+            return roomManager.updateSettings(session, roomCode, parsed.data.settings);
+          });
+
+          if (typeof ack === 'function') {
+            ack({ ok: true, data: updatedSnapshot });
+          }
+
+          io.to(`room:${updatedSnapshot.code}`).emit(SOCKET_EVENTS.ROOM_UPDATED, updatedSnapshot);
+        } catch (error: unknown) {
+          const msg = error instanceof Error ? error.message : 'Failed to update settings';
+          const code = msg.includes('host') ? 'FORBIDDEN' : 'SETTINGS_UPDATE_FAILED';
+          const err: SocketError = { code, message: msg };
+          if (typeof ack === 'function') ack({ ok: false, error: err });
+        }
+      }
+    );
+
+    // --- Room: Get Snapshot (Resync on sequence gap) ---
+    socket.on(
+      SOCKET_EVENTS.ROOM_GET_SNAPSHOT,
+      (rawPayload: unknown, ack?: (response: SocketAck<RoomSnapshot>) => void) => {
+        const parsed = GetSnapshotPayloadSchema.safeParse(rawPayload);
+        if (!parsed.success) {
+          const err: SocketError = { code: 'INVALID_PAYLOAD', message: 'Invalid payload' };
+          if (typeof ack === 'function') ack({ ok: false, error: err });
+          return;
+        }
+
+        try {
+          const snapshot = roomManager.getSnapshot(parsed.data.roomCode);
+          if (typeof ack === 'function') {
+            ack({ ok: true, data: snapshot });
+          }
+          socket.emit(SOCKET_EVENTS.ROOM_SNAPSHOT, snapshot);
+        } catch (error: unknown) {
+          const msg = error instanceof Error ? error.message : 'Snapshot failed';
+          const err: SocketError = { code: 'ROOM_NOT_FOUND', message: msg };
+          if (typeof ack === 'function') ack({ ok: false, error: err });
+        }
+      }
+    );
+
+    // --- Game: Start (Host Only) ---
+    socket.on(
+      SOCKET_EVENTS.GAME_START,
+      async (rawPayload: unknown, ack?: (response: SocketAck<RoomSnapshot>) => void) => {
+        const parsed = StartGamePayloadSchema.safeParse(rawPayload);
+        if (!parsed.success) {
+          const err: SocketError = {
+            code: 'INVALID_PAYLOAD',
+            message: 'Validation failed: ' + parsed.error.issues.map((i) => i.message).join(', '),
+            details: parsed.error.flatten(),
+          };
+          if (typeof ack === 'function') ack({ ok: false, error: err });
+          return;
+        }
+
+        const roomCode = parsed.data.roomCode.trim().toUpperCase();
+
+        try {
+          const snapshot = await roomManager.enqueueRoomAction(roomCode, () => {
+            return roomManager.startGame(session, roomCode);
+          });
+
+          if (typeof ack === 'function') {
+            ack({ ok: true, data: snapshot });
+          }
+
+          io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.ROOM_UPDATED, snapshot);
+          if (snapshot.gameState) {
+            io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.GAME_STATE_UPDATED, {
+              roomCode: snapshot.code,
+              sequenceNumber: snapshot.sequenceNumber,
+              gameState: snapshot.gameState,
+            });
+          }
+        } catch (error: unknown) {
+          const msg = error instanceof Error ? error.message : 'Failed to start game';
+          let code = 'GAME_START_FAILED';
+          if (msg.includes('host')) code = 'FORBIDDEN';
+          else if (msg.includes('At least 2 players')) code = 'INSUFFICIENT_PLAYERS';
+          else if (msg.includes('already in progress')) code = 'GAME_ALREADY_STARTED';
+          const err: SocketError = { code, message: msg };
+          if (typeof ack === 'function') ack({ ok: false, error: err });
+        }
+      }
+    );
+
+    // --- Game: Roll Dice (Active Player Only) ---
+    socket.on(
+      SOCKET_EVENTS.GAME_ROLL_DICE,
+      async (rawPayload: unknown, ack?: (response: SocketAck<RoomSnapshot>) => void) => {
+        const parsed = RollDicePayloadSchema.safeParse(rawPayload);
+        if (!parsed.success) {
+          const err: SocketError = {
+            code: 'INVALID_PAYLOAD',
+            message: 'Validation failed: ' + parsed.error.issues.map((i) => i.message).join(', '),
+            details: parsed.error.flatten(),
+          };
+          if (typeof ack === 'function') ack({ ok: false, error: err });
+          return;
+        }
+
+        const roomCode = parsed.data.roomCode.trim().toUpperCase();
+
+        try {
+          const snapshot = await roomManager.enqueueRoomAction(roomCode, () => {
+            return roomManager.rollDice(session, roomCode);
+          });
+
+          if (typeof ack === 'function') {
+            ack({ ok: true, data: snapshot });
+          }
+
+          io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.ROOM_UPDATED, snapshot);
+          if (snapshot.gameState) {
+            io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.GAME_STATE_UPDATED, {
+              roomCode: snapshot.code,
+              sequenceNumber: snapshot.sequenceNumber,
+              gameState: snapshot.gameState,
+            });
+          }
+        } catch (error: unknown) {
+          const msg = error instanceof Error ? error.message : 'Failed to roll dice';
+          let code = 'ROLL_DICE_FAILED';
+          if (msg.includes('not your turn')) code = 'NOT_YOUR_TURN';
+          else if (msg.includes('already rolled')) code = 'ALREADY_ROLLED';
+          else if (msg.includes('not in progress')) code = 'GAME_NOT_IN_PROGRESS';
+          const err: SocketError = { code, message: msg };
+          if (typeof ack === 'function') ack({ ok: false, error: err });
+        }
+      }
+    );
+
+    // --- Game: Buy Property ---
+    socket.on(
+      SOCKET_EVENTS.GAME_BUY_PROPERTY,
+      async (rawPayload: unknown, ack?: (response: SocketAck<RoomSnapshot>) => void) => {
+        const parsed = BuyPropertyPayloadSchema.safeParse(rawPayload);
+        if (!parsed.success) {
+          const err: SocketError = {
+            code: 'INVALID_PAYLOAD',
+            message: 'Validation failed: ' + parsed.error.issues.map((i) => i.message).join(', '),
+            details: parsed.error.flatten(),
+          };
+          if (typeof ack === 'function') ack({ ok: false, error: err });
+          return;
+        }
+
+        const roomCode = parsed.data.roomCode.trim().toUpperCase();
+
+        try {
+          const snapshot = await roomManager.enqueueRoomAction(roomCode, () => {
+            return roomManager.buyProperty(session, roomCode);
+          });
+
+          if (typeof ack === 'function') {
+            ack({ ok: true, data: snapshot });
+          }
+
+          io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.ROOM_UPDATED, snapshot);
+          if (snapshot.gameState) {
+            io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.GAME_STATE_UPDATED, {
+              roomCode: snapshot.code,
+              sequenceNumber: snapshot.sequenceNumber,
+              gameState: snapshot.gameState,
+            });
+          }
+        } catch (error: unknown) {
+          const msg = error instanceof Error ? error.message : 'Failed to purchase property';
+          let code = 'BUY_PROPERTY_FAILED';
+          if (msg.includes('not your turn')) code = 'NOT_YOUR_TURN';
+          else if (msg.includes('Insufficient funds')) code = 'INSUFFICIENT_FUNDS';
+          else if (msg.includes('already owned')) code = 'ALREADY_OWNED';
+          else if (msg.includes('cannot be purchased')) code = 'NOT_PURCHASABLE';
+          const err: SocketError = { code, message: msg };
+          if (typeof ack === 'function') ack({ ok: false, error: err });
+        }
+      }
+    );
+
+    // --- Game: End Turn ---
+    socket.on(
+      SOCKET_EVENTS.GAME_END_TURN,
+      async (rawPayload: unknown, ack?: (response: SocketAck<RoomSnapshot>) => void) => {
+        const parsed = EndTurnPayloadSchema.safeParse(rawPayload);
+        if (!parsed.success) {
+          const err: SocketError = {
+            code: 'INVALID_PAYLOAD',
+            message: 'Validation failed: ' + parsed.error.issues.map((i) => i.message).join(', '),
+            details: parsed.error.flatten(),
+          };
+          if (typeof ack === 'function') ack({ ok: false, error: err });
+          return;
+        }
+
+        const roomCode = parsed.data.roomCode.trim().toUpperCase();
+
+        try {
+          const snapshot = await roomManager.enqueueRoomAction(roomCode, () => {
+            return roomManager.endTurn(session, roomCode);
+          });
+
+          if (typeof ack === 'function') {
+            ack({ ok: true, data: snapshot });
+          }
+
+          io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.ROOM_UPDATED, snapshot);
+          if (snapshot.gameState) {
+            io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.GAME_STATE_UPDATED, {
+              roomCode: snapshot.code,
+              sequenceNumber: snapshot.sequenceNumber,
+              gameState: snapshot.gameState,
+            });
+          }
+        } catch (error: unknown) {
+          const msg = error instanceof Error ? error.message : 'Failed to end turn';
+          let code = 'END_TURN_FAILED';
+          if (msg.includes('not your turn')) code = 'NOT_YOUR_TURN';
+          else if (msg.includes('must roll')) code = 'MUST_ROLL_FIRST';
+          const err: SocketError = { code, message: msg };
+          if (typeof ack === 'function') ack({ ok: false, error: err });
+        }
+      }
+    );
+
+    // --- Chat: Send Message ---
+    socket.on(
+      SOCKET_EVENTS.CHAT_SEND,
+      (rawPayload: unknown, ack?: (response: SocketAck<{ id: string }>) => void) => {
+        const parsed = SendChatPayloadSchema.safeParse(rawPayload);
+        if (!parsed.success) {
+          const err: SocketError = { code: 'INVALID_PAYLOAD', message: 'Invalid chat message' };
+          if (typeof ack === 'function') ack({ ok: false, error: err });
+          return;
+        }
+
+        const roomCode = parsed.data.roomCode.trim().toUpperCase();
+        const broadcast: ChatMessageBroadcast = {
+          id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+          roomCode,
+          senderId: session.sessionId,
+          senderNickname: session.nickname,
+          text: parsed.data.text,
+          timestamp: Date.now(),
+        };
+
+        const validatedBroadcast = ChatMessageBroadcastSchema.safeParse(broadcast);
+        if (validatedBroadcast.success) {
+          io.to(`room:${roomCode}`).emit(SOCKET_EVENTS.CHAT_MESSAGE, validatedBroadcast.data);
+          if (typeof ack === 'function') ack({ ok: true, data: { id: broadcast.id } });
+        }
+      }
+    );
+
+    // --- Disconnect ---
+    socket.on('disconnect', () => {
+      const result = roomManager.handleSocketDisconnect(socket.id);
+      if (result?.snapshot && result.roomCode) {
+        io.to(`room:${result.roomCode}`).emit(SOCKET_EVENTS.ROOM_UPDATED, result.snapshot);
+      }
+      // eslint-disable-next-line no-console
+      console.log(`[Socket.IO] Client disconnected: socket_id=${socket.id}`);
+    });
+  });
+
+  const start = (port = options.port ?? 3001, host = options.host ?? '0.0.0.0'): Promise<number> => {
+    return new Promise((resolve) => {
+      httpServer.listen(port, host, () => {
+        const address = httpServer.address();
+        const actualPort = typeof address === 'object' && address ? address.port : port;
+        resolve(actualPort);
+      });
+    });
+  };
+
+  const stop = (): Promise<void> => {
+    return new Promise((resolve) => {
+      io.close(() => {
+        httpServer.close(() => {
+          resolve();
+        });
+      });
+    });
+  };
+
+  return {
+    httpServer,
+    io,
+    roomManager,
+    start,
+    stop,
+  };
+}
