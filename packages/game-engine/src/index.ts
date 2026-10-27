@@ -64,6 +64,8 @@ export function getEngineInfo(): EngineInfo {
   };
 }
 
-// Re-export Board and Engine logic
+// Re-export Board, Cards, and Engine logic
 export * from './board.js';
+export * from './cards.js';
 export * from './engine.js';
+
