@@ -467,6 +467,8 @@ export class RoomManager {
         noRentInPrison: room.settings.noRentInPrison,
         vacationCash: room.settings.vacationCash,
         evenBuild: room.settings.evenBuild,
+        auction: room.settings.auction,
+        mortgage: room.settings.mortgage,
       }
     );
 
