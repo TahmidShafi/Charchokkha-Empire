@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Board } from './Board';
 import { ChatPanel, type ChatMessage } from './ChatPanel';
 import { GameSettings } from './GameSettings';
+import { PostMatchResults } from './PostMatchResults';
 import { soundManager } from '../audio/soundManager';
 import {
   SOCKET_EVENTS,
@@ -41,6 +42,7 @@ export function GameRoom({
   const [activeMobileTab, setActiveMobileTab] = useState<MobileTab>('board');
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   const [isMuted, setIsMuted] = useState(() => soundManager.isMuted());
+  const [dismissedResultsForSequence, setDismissedResultsForSequence] = useState<number | null>(null);
 
   const handleToggleMute = () => {
     const next = soundManager.toggleMuted();
@@ -49,6 +51,12 @@ export function GameRoom({
 
   const roomCode = roomSnapshot.code;
   const roomUrl = `${window.location.origin}/?room=${roomCode}`;
+
+  const isGameFinished =
+    roomSnapshot.state === 'finished' || roomSnapshot.gameState?.phase === 'finished';
+
+  const showResultsOverlay =
+    isGameFinished && dismissedResultsForSequence !== roomSnapshot.sequenceNumber;
 
   const isSpectator = Boolean(
     roomSnapshot &&
@@ -131,6 +139,16 @@ export function GameRoom({
       if (!ack.ok) {
         // eslint-disable-next-line no-console
         console.error('Failed to start game:', ack.error.message);
+      }
+    });
+  };
+
+  const handleRematch = () => {
+    if (!socket || !isHost) return;
+    socket.emit(SOCKET_EVENTS.ROOM_REMATCH, { roomCode }, (ack: SocketAck<RoomSnapshot>) => {
+      if (!ack.ok) {
+        // eslint-disable-next-line no-console
+        console.error('Failed to initiate rematch:', ack.error.message);
       }
     });
   };
@@ -515,6 +533,7 @@ export function GameRoom({
               onDeclareBankruptcy={handleDeclareBankruptcy}
               onEndTurn={handleEndTurn}
               isRolling={isRolling}
+              onShowResults={() => setDismissedResultsForSequence(null)}
             />
           )}
 
@@ -617,7 +636,34 @@ export function GameRoom({
         </button>
       </nav>
 
-      {/* ==================== 5. LEAVE CONFIRMATION MODAL ==================== */}
+      {/* ==================== 5. POST-MATCH RESULTS SCREEN ==================== */}
+      {showResultsOverlay && (
+        <PostMatchResults
+          roomSnapshot={roomSnapshot}
+          currentSessionId={currentSessionId}
+          isHost={isHost}
+          isSpectator={isSpectator}
+          onRematch={handleRematch}
+          onToggleBoardView={() => setDismissedResultsForSequence(roomSnapshot.sequenceNumber)}
+          onLeaveRoom={() => setShowLeaveConfirm(true)}
+        />
+      )}
+
+      {/* Floating Inspection Banner when results are dismissed to view board */}
+      {isGameFinished && !showResultsOverlay && (
+        <div className="inspect-board-floating-banner" role="region" aria-label="Inspection Controls">
+          <span className="inspect-banner-text">Viewing Final Tabletop</span>
+          <button
+            type="button"
+            className="btn-floating-view-results"
+            onClick={() => setDismissedResultsForSequence(null)}
+          >
+            View Match Results 🏆
+          </button>
+        </div>
+      )}
+
+      {/* ==================== 6. LEAVE CONFIRMATION MODAL ==================== */}
       {showLeaveConfirm && (
         <div
           className="modal-backdrop-scrim"

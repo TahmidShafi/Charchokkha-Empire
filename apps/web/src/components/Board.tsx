@@ -39,6 +39,7 @@ export interface BoardProps {
   onDeclareBankruptcy: () => void;
   onEndTurn: () => void;
   isRolling: boolean;
+  onShowResults?: () => void;
 }
 
 export function Board({
@@ -64,6 +65,7 @@ export function Board({
   onDeclareBankruptcy,
   onEndTurn,
   isRolling,
+  onShowResults,
 }: BoardProps) {
   const gameState = roomSnapshot.gameState;
   const isGameStarted = (roomSnapshot.state === 'in_progress' || roomSnapshot.state === 'finished') && !!gameState;
@@ -536,6 +538,15 @@ export function Board({
                 <span className="victory-winner-name">
                   Winner: {winnerPlayer?.nickname ?? 'Champion'}!
                 </span>
+                {onShowResults && (
+                  <button
+                    type="button"
+                    className="btn-courtyard-results"
+                    onClick={onShowResults}
+                  >
+                    View Standings & Stats 🏆
+                  </button>
+                )}
               </div>
             </div>
           )}
@@ -694,10 +705,10 @@ export function Board({
             ) : isGameFinished ? (
               <button
                 type="button"
-                className="btn-primary-action"
-                onClick={() => window.location.reload()}
+                className="btn-primary-action btn-view-results-action"
+                onClick={onShowResults}
               >
-                Return to Lobby
+                View Match Results 🏆
               </button>
             ) : isMyTurn ? (
               turnPhase === 'need_roll' ? (
