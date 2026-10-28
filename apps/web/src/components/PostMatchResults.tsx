@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import type { Player, RoomSnapshot } from '@charchokkha/shared';
 import {
   calculateStandings,
@@ -28,6 +28,16 @@ export const PostMatchResults: React.FC<PostMatchResultsProps> = ({
   const [activeTab, setActiveTab] = useState<'standings' | 'stats' | 'properties'>('standings');
   const gameState = roomSnapshot.gameState;
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onToggleBoardView();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onToggleBoardView]);
+
   const standings = useMemo(() => {
     if (!gameState) return [];
     return calculateStandings(gameState, roomSnapshot.players);
@@ -40,12 +50,16 @@ export const PostMatchResults: React.FC<PostMatchResultsProps> = ({
 
   // Determine game conclusion reason
   const conclusionReason = useMemo(() => {
-    if (!gameState) return 'Game Finished';
-    const bankruptCount = Object.values(gameState.players).filter((p) => p.isBankrupt).length;
-    const totalPlayers = Object.keys(gameState.players).length;
+    if (!gameState) return 'Match Finished';
+    const playersList = Object.values(gameState.players);
+    const bankruptCount = playersList.filter((p) => p.isBankrupt).length;
+    const totalPlayers = playersList.length;
 
     if (totalPlayers > 1 && bankruptCount >= totalPlayers - 1) {
       return 'Elimination Victory — All opponents declared bankruptcy';
+    }
+    if (gameState.lastActionMessage?.includes('declared bankruptcy')) {
+      return 'Elimination Victory — Opponent declared bankruptcy';
     }
     return 'Match Concluded Authoritatively';
   }, [gameState]);
@@ -293,9 +307,13 @@ export const PostMatchResults: React.FC<PostMatchResultsProps> = ({
                           const badge = getSpaceBadge(spaceId);
                           const propRecord = gameState?.properties[spaceId];
                           const isMortgaged =
-                            typeof propRecord === 'object' ? propRecord.isMortgaged : false;
+                            typeof propRecord === 'object' && propRecord !== null
+                              ? propRecord.isMortgaged
+                              : false;
                           const houses =
-                            typeof propRecord === 'object' ? propRecord.houses : 0;
+                            typeof propRecord === 'object' && propRecord !== null
+                              ? propRecord.houses
+                              : 0;
                           const groupColor = space.group
                             ? PROPERTY_GROUP_COLORS[space.group]
                             : '#64748b';

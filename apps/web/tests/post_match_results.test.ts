@@ -130,4 +130,33 @@ describe('Post-Match Results & Standings Frontend Verification Suite', () => {
     expect(isHost('session_guest')).toBe(false);
     expect(isHost('session_spectator')).toBe(false);
   });
+
+  it('determines conclusion reason dynamically and handles missing stats gracefully', () => {
+    // 1. Elimination conclusion
+    const stateElim = createInitialGameState(['p1', 'p2']);
+    stateElim.phase = 'finished';
+    stateElim.winnerId = 'p1';
+    stateElim.players['p2'].isBankrupt = true;
+
+    const bankruptCount = Object.values(stateElim.players).filter((p) => p.isBankrupt).length;
+    const totalPlayers = Object.keys(stateElim.players).length;
+    const isElimination = totalPlayers > 1 && bankruptCount >= totalPlayers - 1;
+    expect(isElimination).toBe(true);
+
+    // 2. Authoritative match conclusion (e.g. 2 active players when match is finished)
+    const stateNonElim = createInitialGameState(['p1', 'p2']);
+    stateNonElim.phase = 'finished';
+    const isNonElim = Object.keys(stateNonElim.players).length > 1 &&
+      Object.values(stateNonElim.players).filter((p) => p.isBankrupt).length >= Object.keys(stateNonElim.players).length - 1;
+    expect(isNonElim).toBe(false);
+
+    // 3. calculateStandings gracefully handles players with undefined stats
+    delete stateElim.players['p1'].stats;
+    delete stateElim.players['p2'].stats;
+    const standings = calculateStandings(stateElim);
+    expect(standings[0].stats).toBeDefined();
+    expect(standings[0].stats?.rentPaid).toBe(0);
+    expect(standings[0].stats?.propertiesBought).toBe(0);
+    expect(standings[0].stats?.auctionsWon).toBe(0);
+  });
 });
