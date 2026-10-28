@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   BOARD_SPACES,
   PROPERTY_GROUP_COLORS,
@@ -7,6 +7,8 @@ import {
 } from '../boardData';
 import { getBoardSpace, getGroupSpaces, hasColorMonopoly } from '@charchokkha/game-engine';
 import { type Player, type PropertyRecord, type RoomSnapshot } from '@charchokkha/shared';
+import { soundManager } from '../audio/soundManager';
+import { calculateStepPath, prefersReducedMotion } from '../utils/tokenMovement';
 
 export interface BoardProps {
   roomCode: string;
@@ -79,14 +81,174 @@ export function Board({
   const [tradeOfferedProps, setTradeOfferedProps] = useState<number[]>([]);
   const [tradeRequestedProps, setTradeRequestedProps] = useState<number[]>([]);
 
+  // Animation & Audio State
+  const [displayedPositions, setDisplayedPositions] = useState<Record<string, number>>({});
+  const [isDiceAnimating, setIsDiceAnimating] = useState(false);
+  const [recentEventAlert, setRecentEventAlert] = useState<{
+    id: string;
+    text: string;
+    type: 'purchase' | 'rent' | 'prison' | 'auction' | 'trade' | 'victory';
+  } | null>(null);
+
+  const prevRollKeyRef = useRef<string>('');
+  const prevActionMsgRef = useRef<string>('');
+  const prevActivePlayerRef = useRef<string | undefined>(activePlayerId);
+  const movementIntervalsRef = useRef<Record<string, NodeJS.Timeout>>({});
+  const isInitialMountRef = useRef<boolean>(true);
+  const alertTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Synchronize displayed positions and trigger step animations
+  useEffect(() => {
+    // 1. Initial setup or reconnection / room reset: directly set server positions without historical replay
+    if (isInitialMountRef.current || roomSnapshot.sequenceNumber <= 1) {
+      const initialMap: Record<string, number> = {};
+      roomSnapshot.players.forEach((p) => {
+        initialMap[p.id] = gameState?.players[p.id]?.position ?? 0;
+      });
+      setDisplayedPositions(initialMap);
+      isInitialMountRef.current = false;
+      prevActivePlayerRef.current = activePlayerId;
+      if (gameState?.lastDiceRoll) {
+        prevRollKeyRef.current = `${gameState.lastDiceRoll.die1}_${gameState.lastDiceRoll.die2}_${gameState.lastDiceRoll.total}_${roomSnapshot.sequenceNumber}`;
+      }
+      return;
+    }
+
+    // 2. Animate dice when a new authoritative dice roll arrives
+    if (gameState?.lastDiceRoll) {
+      const rollKey = `${gameState.lastDiceRoll.die1}_${gameState.lastDiceRoll.die2}_${gameState.lastDiceRoll.total}_${roomSnapshot.sequenceNumber}`;
+      if (rollKey !== prevRollKeyRef.current && isGameStarted) {
+        prevRollKeyRef.current = rollKey;
+        soundManager.playDiceRoll();
+        if (!prefersReducedMotion()) {
+          setIsDiceAnimating(true);
+          const diceTimer = setTimeout(() => setIsDiceAnimating(false), 450);
+          return () => clearTimeout(diceTimer);
+        }
+      }
+    }
+
+    // 3. Tile-by-tile token stepping for each seated player
+    const reduced = prefersReducedMotion();
+    roomSnapshot.players.forEach((p) => {
+      const targetPos = gameState?.players[p.id]?.position ?? 0;
+      const currentPos = displayedPositions[p.id] ?? targetPos;
+
+      if (targetPos === currentPos) return;
+
+      // Clear any prior active movement timer for this player
+      if (movementIntervalsRef.current[p.id]) {
+        clearInterval(movementIntervalsRef.current[p.id]);
+        delete movementIntervalsRef.current[p.id];
+      }
+
+      if (reduced) {
+        // Immediate jump if reduced motion is requested
+        setDisplayedPositions((prev) => ({ ...prev, [p.id]: targetPos }));
+        return;
+      }
+
+      const path = calculateStepPath(currentPos, targetPos);
+      if (path.length === 0) {
+        setDisplayedPositions((prev) => ({ ...prev, [p.id]: targetPos }));
+        return;
+      }
+
+      // If direct transfer (e.g. Go to Prison direct jump)
+      if (path.length === 1) {
+        setDisplayedPositions((prev) => ({ ...prev, [p.id]: targetPos }));
+        if (targetPos === 10) {
+          soundManager.playGoToPrison();
+        }
+        return;
+      }
+
+      // Step along the path tile-by-tile
+      let stepIndex = 0;
+      const stepInterval = setInterval(() => {
+        if (stepIndex < path.length) {
+          const nextTile = path[stepIndex];
+          setDisplayedPositions((prev) => ({ ...prev, [p.id]: nextTile }));
+          soundManager.playStepHop();
+          stepIndex++;
+        } else {
+          clearInterval(stepInterval);
+          delete movementIntervalsRef.current[p.id];
+          setDisplayedPositions((prev) => ({ ...prev, [p.id]: targetPos }));
+        }
+      }, 105);
+
+      movementIntervalsRef.current[p.id] = stepInterval;
+    });
+
+    return () => {
+      Object.values(movementIntervalsRef.current).forEach(clearInterval);
+      movementIntervalsRef.current = {};
+    };
+  }, [roomSnapshot.sequenceNumber, gameState?.lastDiceRoll, gameState?.players, isGameStarted]);
+
+  // Audio & Feedback triggers for notable game events
+  useEffect(() => {
+    if (!isGameStarted || isGameFinished) return;
+
+    // Turn transition to local player
+    if (activePlayerId === currentSessionId && prevActivePlayerRef.current !== currentSessionId) {
+      soundManager.playTurnPing();
+    }
+    prevActivePlayerRef.current = activePlayerId;
+
+    // Action message audio & feedback triggers
+    const currentActionMsg = gameState?.lastActionMessage;
+    if (currentActionMsg && currentActionMsg !== prevActionMsgRef.current) {
+      prevActionMsgRef.current = currentActionMsg;
+
+      let eventType: 'purchase' | 'rent' | 'prison' | 'auction' | 'trade' | 'victory' | null = null;
+
+      if (currentActionMsg.startsWith('Purchased')) {
+        eventType = 'purchase';
+        soundManager.playBuyProperty();
+      } else if (currentActionMsg.includes('Paid $') && currentActionMsg.includes('rent')) {
+        eventType = 'rent';
+        soundManager.playRentPayment();
+      } else if (currentActionMsg.includes('Arrested') || currentActionMsg.includes('In Prison')) {
+        eventType = 'prison';
+        soundManager.playGoToPrison();
+      } else if (currentActionMsg.includes('Auction ended!')) {
+        eventType = 'auction';
+        soundManager.playAuctionGavel();
+      } else if (currentActionMsg.includes('Trade completed')) {
+        eventType = 'trade';
+        soundManager.playBuyProperty();
+      } else if (currentActionMsg.includes('Winner is') || currentActionMsg.includes('Game over')) {
+        eventType = 'victory';
+        soundManager.playVictory();
+      }
+
+      if (eventType) {
+        if (alertTimeoutRef.current) clearTimeout(alertTimeoutRef.current);
+        setRecentEventAlert({
+          id: `${Date.now()}_${eventType}`,
+          text: currentActionMsg,
+          type: eventType,
+        });
+
+        alertTimeoutRef.current = setTimeout(() => {
+          setRecentEventAlert(null);
+        }, 4500);
+      }
+    }
+  }, [isGameStarted, isGameFinished, activePlayerId, currentSessionId, gameState?.lastActionMessage]);
+
   // Player positions and details for token rendering
   const playersWithTokens = roomSnapshot.players.map((p: Player) => {
     const pState = gameState?.players[p.id];
+    const serverPos = pState ? pState.position : 0;
+    const currentRenderPos = displayedPositions[p.id] ?? serverPos;
     return {
       id: p.id,
       nickname: p.nickname,
       avatar: p.avatar,
-      position: pState ? pState.position : 0,
+      position: currentRenderPos,
       cash: pState ? pState.cash : roomSnapshot.settings.startingCash,
       isBankrupt: pState ? pState.isBankrupt : false,
       inPrison: pState ? pState.inPrison : false,
@@ -463,13 +625,24 @@ export function Board({
             aria-label="Roll dice pair"
             tabIndex={isMyTurn && turnPhase === 'need_roll' ? 0 : -1}
           >
-            <div className={`tactile-dice-cube ${isRolling ? 'rolling-wobble' : ''}`}>
+            <div className={`tactile-dice-cube ${isRolling || isDiceAnimating ? 'rolling-wobble' : ''}`}>
               {renderDiePips(dice.die1)}
             </div>
-            <div className={`tactile-dice-cube ${isRolling ? 'rolling-wobble' : ''}`}>
+            <div className={`tactile-dice-cube ${isRolling || isDiceAnimating ? 'rolling-wobble' : ''}`}>
               {renderDiePips(dice.die2)}
             </div>
           </div>
+
+          {/* Interactive Event Feedback Pill */}
+          {recentEventAlert && (
+            <div
+              className={`courtyard-event-feedback-pill event-pill-${recentEventAlert.type}`}
+              role="status"
+              aria-live="polite"
+            >
+              <span className="event-pill-text">{recentEventAlert.text}</span>
+            </div>
+          )}
 
           {/* Contextual Action Buttons */}
           <div className="courtyard-action-controls">
