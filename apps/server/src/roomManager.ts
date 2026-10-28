@@ -235,15 +235,14 @@ export class RoomManager {
       throw new Error(`Room not found: ${code}`);
     }
 
-    if (room.state === 'abandoned' || room.state === 'finished') {
-      throw new Error(`Cannot join room: status is ${room.state}`);
-    }
-
     session.nickname = nickname.trim() || session.nickname;
     session.avatar = avatar || session.avatar;
 
     // Check if player is reconnecting to existing seat
     if (room.players.has(session.sessionId)) {
+      if (room.state === 'abandoned') {
+        throw new Error('Cannot join room: status is abandoned');
+      }
       const existingPlayer = room.players.get(session.sessionId)!;
       existingPlayer.connected = true;
       existingPlayer.nickname = session.nickname;
@@ -256,6 +255,10 @@ export class RoomManager {
         snapshot: this.toSnapshot(room),
         isReconnect: true,
       };
+    }
+
+    if (room.state === 'abandoned' || room.state === 'finished') {
+      throw new Error(`Cannot join room: status is ${room.state}`);
     }
 
     // Leave any other room
@@ -318,12 +321,24 @@ export class RoomManager {
       throw new Error(`Room not found: ${code}`);
     }
 
-    if (room.state === 'abandoned' || room.state === 'finished') {
-      throw new Error(`Cannot spectate room: status is ${room.state}`);
-    }
-
     if (nickname) {
       session.nickname = nickname.trim() || session.nickname;
+    }
+
+    // If existing spectator reconnecting
+    if (room.spectators.has(session.sessionId)) {
+      if (room.state === 'abandoned') {
+        throw new Error('Cannot spectate room: status is abandoned');
+      }
+      const existing = room.spectators.get(session.sessionId)!;
+      existing.socketId = session.socketId;
+      session.isSpectator = true;
+      session.currentRoomCode = code;
+      return this.toSnapshot(room);
+    }
+
+    if (room.state === 'abandoned' || room.state === 'finished') {
+      throw new Error(`Cannot spectate room: status is ${room.state}`);
     }
 
     // Leave any other room if different

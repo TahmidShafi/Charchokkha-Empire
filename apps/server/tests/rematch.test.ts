@@ -147,4 +147,107 @@ describe('Authoritative Rematch and Post-Match Transition Test Suite', () => {
     guest.socket.disconnect();
     spectator.socket.disconnect();
   });
+
+  it('verifies reconnection during finished match, duplicate rematch idempotency, stale action rejection, and fresh state on second match', async () => {
+    const host = await connectClient('HostDavid');
+    const guest = await connectClient('GuestEmma');
+
+    // 1. Create and start match
+    const createRes = await new Promise<SocketAck<RoomSnapshot>>((resolve) => {
+      host.socket.emit(
+        SOCKET_EVENTS.ROOM_CREATE,
+        { nickname: host.nickname, settings: { startingCash: 1500 } },
+        resolve
+      );
+    });
+    expect(createRes.ok).toBe(true);
+    if (!createRes.ok) throw new Error('Create room failed');
+    const roomCode = createRes.data.code;
+
+    await new Promise<SocketAck<RoomSnapshot>>((resolve) => {
+      guest.socket.emit(SOCKET_EVENTS.ROOM_JOIN, { roomCode, nickname: guest.nickname }, resolve);
+    });
+
+    await new Promise<SocketAck<RoomSnapshot>>((resolve) => {
+      host.socket.emit(SOCKET_EVENTS.GAME_START, { roomCode }, resolve);
+    });
+
+    // 2. Roll dice and finish game by bankrupting guest
+    await new Promise<SocketAck<RoomSnapshot>>((resolve) => {
+      host.socket.emit(SOCKET_EVENTS.GAME_ROLL_DICE, { roomCode }, resolve);
+    });
+
+    const finishRes = await new Promise<SocketAck<RoomSnapshot>>((resolve) => {
+      guest.socket.emit(SOCKET_EVENTS.GAME_DECLARE_BANKRUPTCY, { roomCode }, resolve);
+    });
+    expect(finishRes.ok).toBe(true);
+    if (finishRes.ok) {
+      expect(finishRes.data.state).toBe('finished');
+      expect(finishRes.data.gameState?.winnerId).toBe(host.session.sessionId);
+    }
+
+    // 3. Test reconnection of seated player during finished match
+    guest.socket.disconnect();
+
+    const reconnectSocket: ClientSocket = ioc(`http://localhost:${serverPort}`, {
+      transports: ['websocket'],
+      forceNew: true,
+      auth: { token: guest.session.token },
+    });
+
+    await new Promise<SessionAuthenticatedPayload>((resolve) => {
+      reconnectSocket.on(SOCKET_EVENTS.SESSION_AUTHENTICATED, resolve);
+    });
+
+    const reconnectRes = await new Promise<SocketAck<RoomSnapshot>>((resolve) => {
+      reconnectSocket.emit(
+        SOCKET_EVENTS.ROOM_JOIN,
+        { roomCode, nickname: guest.nickname },
+        resolve
+      );
+    });
+    expect(reconnectRes.ok).toBe(true);
+    if (reconnectRes.ok) {
+      expect(reconnectRes.data.state).toBe('finished');
+      expect(reconnectRes.data.gameState?.winnerId).toBe(host.session.sessionId);
+    }
+
+    // 4. Test duplicate / concurrent rematch requests from host
+    const [rematch1, rematch2] = await Promise.all([
+      new Promise<SocketAck<RoomSnapshot>>((resolve) => {
+        host.socket.emit(SOCKET_EVENTS.ROOM_REMATCH, { roomCode }, resolve);
+      }),
+      new Promise<SocketAck<RoomSnapshot>>((resolve) => {
+        host.socket.emit(SOCKET_EVENTS.ROOM_REMATCH, { roomCode }, resolve);
+      }),
+    ]);
+
+    // Exactly one must succeed, and the other must be rejected
+    const okCount = (rematch1.ok ? 1 : 0) + (rematch2.ok ? 1 : 0);
+    const failCount = (!rematch1.ok ? 1 : 0) + (!rematch2.ok ? 1 : 0);
+    expect(okCount).toBe(1);
+    expect(failCount).toBe(1);
+
+    // 5. While in 'waiting' state after rematch, stale game actions must be rejected
+    const staleRoll = await new Promise<SocketAck<RoomSnapshot>>((resolve) => {
+      host.socket.emit(SOCKET_EVENTS.GAME_ROLL_DICE, { roomCode }, resolve);
+    });
+    expect(staleRoll.ok).toBe(false);
+
+    // 6. Host starts fresh game
+    const restartRes = await new Promise<SocketAck<RoomSnapshot>>((resolve) => {
+      host.socket.emit(SOCKET_EVENTS.GAME_START, { roomCode }, resolve);
+    });
+    expect(restartRes.ok).toBe(true);
+    if (restartRes.ok) {
+      expect(restartRes.data.state).toBe('in_progress');
+      expect(restartRes.data.gameState?.winnerId).toBeUndefined();
+      expect(restartRes.data.gameState?.eliminationOrder).toEqual([]);
+      expect(restartRes.data.gameState?.properties).toEqual({});
+      expect(restartRes.data.gameState?.players[guest.session.sessionId].isBankrupt).toBe(false);
+    }
+
+    host.socket.disconnect();
+    reconnectSocket.disconnect();
+  });
 });
