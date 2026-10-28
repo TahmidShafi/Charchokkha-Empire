@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Board } from './Board';
 import { ChatPanel, type ChatMessage } from './ChatPanel';
 import { GameSettings } from './GameSettings';
@@ -45,8 +45,35 @@ export function GameRoom({
   const [isMuted, setIsMuted] = useState(() => soundManager.isMuted());
   const [dismissedResultsForSequence, setDismissedResultsForSequence] = useState<number | null>(null);
 
-  const generateRequestId = (action: string) =>
-    `req_${action}_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+  // Durable pending action tracking: reuses the exact same requestId on retry
+  const pendingRequestsRef = useRef<Map<string, string>>(new Map());
+
+  const getOrCreateRequestId = (actionKey: string): string => {
+    const existing = pendingRequestsRef.current.get(actionKey);
+    if (existing) {
+      return existing;
+    }
+    const newId = `req_${actionKey}_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+    pendingRequestsRef.current.set(actionKey, newId);
+    return newId;
+  };
+
+  const clearRequestId = (actionKey: string) => {
+    pendingRequestsRef.current.delete(actionKey);
+  };
+
+  // Reset in-flight flags on socket disconnect so buttons do not stay stuck
+  useEffect(() => {
+    if (!socket) return;
+    const handleDisconnect = () => {
+      setIsSubmittingAction(false);
+      setIsRolling(false);
+    };
+    socket.on('disconnect', handleDisconnect);
+    return () => {
+      socket.off('disconnect', handleDisconnect);
+    };
+  }, [socket]);
 
   const handleToggleMute = () => {
     const next = soundManager.toggleMuted();
@@ -129,12 +156,17 @@ export function GameRoom({
 
   const handleUpdateSettings = (partial: Partial<RoomSettings>) => {
     if (!socket || !isHost || isSubmittingAction) return;
+    const actionKey = `settings_${roomSnapshot.sequenceNumber}`;
+    const requestId = getOrCreateRequestId(actionKey);
     setIsSubmittingAction(true);
     socket.emit(
       SOCKET_EVENTS.ROOM_UPDATE_SETTINGS,
-      { roomCode, settings: partial, requestId: generateRequestId('settings') },
-      (_ack: SocketAck<RoomSnapshot>) => {
+      { roomCode, settings: partial, requestId },
+      (ack: SocketAck<RoomSnapshot>) => {
         setIsSubmittingAction(false);
+        if (ack?.ok) {
+          clearRequestId(actionKey);
+        }
       }
     );
   };
@@ -142,13 +174,17 @@ export function GameRoom({
   // Authoritative Game Actions
   const handleStartGame = () => {
     if (!socket || !isHost || isSubmittingAction) return;
+    const actionKey = `start_${roomCode}`;
+    const requestId = getOrCreateRequestId(actionKey);
     setIsSubmittingAction(true);
     socket.emit(
       SOCKET_EVENTS.GAME_START,
-      { roomCode, requestId: generateRequestId('start') },
+      { roomCode, requestId },
       (ack: SocketAck<RoomSnapshot>) => {
         setIsSubmittingAction(false);
-        if (!ack.ok) {
+        if (ack.ok) {
+          clearRequestId(actionKey);
+        } else {
           // eslint-disable-next-line no-console
           console.error('Failed to start game:', ack.error.message);
         }
@@ -158,13 +194,17 @@ export function GameRoom({
 
   const handleRematch = () => {
     if (!socket || !isHost || isSubmittingAction) return;
+    const actionKey = `rematch_${roomCode}_seq${roomSnapshot.sequenceNumber}`;
+    const requestId = getOrCreateRequestId(actionKey);
     setIsSubmittingAction(true);
     socket.emit(
       SOCKET_EVENTS.ROOM_REMATCH,
-      { roomCode, requestId: generateRequestId('rematch') },
+      { roomCode, requestId },
       (ack: SocketAck<RoomSnapshot>) => {
         setIsSubmittingAction(false);
-        if (!ack.ok) {
+        if (ack.ok) {
+          clearRequestId(actionKey);
+        } else {
           // eslint-disable-next-line no-console
           console.error('Failed to initiate rematch:', ack.error.message);
         }
@@ -174,17 +214,21 @@ export function GameRoom({
 
   const handleRollDice = () => {
     if (!socket || isRolling || isSubmittingAction) return;
+    const actionKey = `roll_${roomSnapshot.gameState?.currentTurnIndex ?? 0}_seq${roomSnapshot.sequenceNumber}`;
+    const requestId = getOrCreateRequestId(actionKey);
     setIsRolling(true);
     setIsSubmittingAction(true);
     socket.emit(
       SOCKET_EVENTS.GAME_ROLL_DICE,
-      { roomCode, requestId: generateRequestId('roll') },
+      { roomCode, requestId },
       (ack: SocketAck<RoomSnapshot>) => {
         setIsSubmittingAction(false);
         setTimeout(() => {
           setIsRolling(false);
         }, 350);
-        if (!ack.ok) {
+        if (ack.ok) {
+          clearRequestId(actionKey);
+        } else {
           // eslint-disable-next-line no-console
           console.error('Failed to roll dice:', ack.error.message);
         }
@@ -194,13 +238,18 @@ export function GameRoom({
 
   const handleBuyProperty = () => {
     if (!socket || isSubmittingAction) return;
+    const currentPos = roomSnapshot.gameState?.players[currentSessionId]?.position ?? 0;
+    const actionKey = `buy_${currentPos}_seq${roomSnapshot.sequenceNumber}`;
+    const requestId = getOrCreateRequestId(actionKey);
     setIsSubmittingAction(true);
     socket.emit(
       SOCKET_EVENTS.GAME_BUY_PROPERTY,
-      { roomCode, requestId: generateRequestId('buy') },
+      { roomCode, requestId },
       (ack: SocketAck<RoomSnapshot>) => {
         setIsSubmittingAction(false);
-        if (!ack.ok) {
+        if (ack.ok) {
+          clearRequestId(actionKey);
+        } else {
           // eslint-disable-next-line no-console
           console.error('Failed to buy property:', ack.error.message);
         }
@@ -210,13 +259,18 @@ export function GameRoom({
 
   const handleDeclineProperty = () => {
     if (!socket || isSubmittingAction) return;
+    const currentPos = roomSnapshot.gameState?.players[currentSessionId]?.position ?? 0;
+    const actionKey = `decline_${currentPos}_seq${roomSnapshot.sequenceNumber}`;
+    const requestId = getOrCreateRequestId(actionKey);
     setIsSubmittingAction(true);
     socket.emit(
       SOCKET_EVENTS.GAME_DECLINE_PROPERTY,
-      { roomCode, requestId: generateRequestId('decline') },
+      { roomCode, requestId },
       (ack: SocketAck<RoomSnapshot>) => {
         setIsSubmittingAction(false);
-        if (!ack.ok) {
+        if (ack.ok) {
+          clearRequestId(actionKey);
+        } else {
           // eslint-disable-next-line no-console
           console.error('Failed to decline property:', ack.error.message);
         }
@@ -226,13 +280,18 @@ export function GameRoom({
 
   const handleAuctionBid = (bidAmount: number) => {
     if (!socket || isSubmittingAction) return;
+    const spaceId = roomSnapshot.gameState?.auction?.spaceId ?? 0;
+    const actionKey = `bid_${spaceId}_${bidAmount}`;
+    const requestId = getOrCreateRequestId(actionKey);
     setIsSubmittingAction(true);
     socket.emit(
       SOCKET_EVENTS.GAME_AUCTION_BID,
-      { roomCode, bidAmount, requestId: generateRequestId('auction_bid') },
+      { roomCode, bidAmount, requestId },
       (ack: SocketAck<RoomSnapshot>) => {
         setIsSubmittingAction(false);
-        if (!ack.ok) {
+        if (ack.ok) {
+          clearRequestId(actionKey);
+        } else {
           // eslint-disable-next-line no-console
           console.error('Auction bid failed:', ack.error.message);
         }
@@ -242,13 +301,18 @@ export function GameRoom({
 
   const handleAuctionPass = () => {
     if (!socket || isSubmittingAction) return;
+    const spaceId = roomSnapshot.gameState?.auction?.spaceId ?? 0;
+    const actionKey = `pass_${spaceId}`;
+    const requestId = getOrCreateRequestId(actionKey);
     setIsSubmittingAction(true);
     socket.emit(
       SOCKET_EVENTS.GAME_AUCTION_PASS,
-      { roomCode, requestId: generateRequestId('auction_pass') },
+      { roomCode, requestId },
       (ack: SocketAck<RoomSnapshot>) => {
         setIsSubmittingAction(false);
-        if (!ack.ok) {
+        if (ack.ok) {
+          clearRequestId(actionKey);
+        } else {
           // eslint-disable-next-line no-console
           console.error('Auction pass failed:', ack.error.message);
         }
@@ -258,13 +322,17 @@ export function GameRoom({
 
   const handlePayPrisonFine = () => {
     if (!socket || isSubmittingAction) return;
+    const actionKey = `pay_prison_${roomSnapshot.gameState?.currentTurnIndex ?? 0}`;
+    const requestId = getOrCreateRequestId(actionKey);
     setIsSubmittingAction(true);
     socket.emit(
       SOCKET_EVENTS.GAME_PAY_PRISON_FINE,
-      { roomCode, requestId: generateRequestId('pay_prison') },
+      { roomCode, requestId },
       (ack: SocketAck<RoomSnapshot>) => {
         setIsSubmittingAction(false);
-        if (!ack.ok) {
+        if (ack.ok) {
+          clearRequestId(actionKey);
+        } else {
           // eslint-disable-next-line no-console
           console.error('Failed to pay prison fine:', ack.error.message);
         }
@@ -274,13 +342,17 @@ export function GameRoom({
 
   const handleMortgageProperty = (spaceId: number) => {
     if (!socket || isSubmittingAction) return;
+    const actionKey = `mortgage_${spaceId}_seq${roomSnapshot.sequenceNumber}`;
+    const requestId = getOrCreateRequestId(actionKey);
     setIsSubmittingAction(true);
     socket.emit(
       SOCKET_EVENTS.GAME_MORTGAGE_PROPERTY,
-      { roomCode, spaceId, requestId: generateRequestId('mortgage') },
+      { roomCode, spaceId, requestId },
       (ack: SocketAck<RoomSnapshot>) => {
         setIsSubmittingAction(false);
-        if (!ack.ok) {
+        if (ack.ok) {
+          clearRequestId(actionKey);
+        } else {
           // eslint-disable-next-line no-console
           console.error('Failed to mortgage property:', ack.error.message);
         }
@@ -290,13 +362,17 @@ export function GameRoom({
 
   const handleUnmortgageProperty = (spaceId: number) => {
     if (!socket || isSubmittingAction) return;
+    const actionKey = `unmortgage_${spaceId}_seq${roomSnapshot.sequenceNumber}`;
+    const requestId = getOrCreateRequestId(actionKey);
     setIsSubmittingAction(true);
     socket.emit(
       SOCKET_EVENTS.GAME_UNMORTGAGE_PROPERTY,
-      { roomCode, spaceId, requestId: generateRequestId('unmortgage') },
+      { roomCode, spaceId, requestId },
       (ack: SocketAck<RoomSnapshot>) => {
         setIsSubmittingAction(false);
-        if (!ack.ok) {
+        if (ack.ok) {
+          clearRequestId(actionKey);
+        } else {
           // eslint-disable-next-line no-console
           console.error('Failed to unmortgage property:', ack.error.message);
         }
@@ -306,13 +382,17 @@ export function GameRoom({
 
   const handleBuildHouse = (spaceId: number) => {
     if (!socket || isSubmittingAction) return;
+    const actionKey = `build_${spaceId}_seq${roomSnapshot.sequenceNumber}`;
+    const requestId = getOrCreateRequestId(actionKey);
     setIsSubmittingAction(true);
     socket.emit(
       SOCKET_EVENTS.GAME_BUILD_HOUSE,
-      { roomCode, spaceId, requestId: generateRequestId('build') },
+      { roomCode, spaceId, requestId },
       (ack: SocketAck<RoomSnapshot>) => {
         setIsSubmittingAction(false);
-        if (!ack.ok) {
+        if (ack.ok) {
+          clearRequestId(actionKey);
+        } else {
           // eslint-disable-next-line no-console
           console.error('Failed to build house:', ack.error.message);
         }
@@ -322,13 +402,17 @@ export function GameRoom({
 
   const handleSellHouse = (spaceId: number) => {
     if (!socket || isSubmittingAction) return;
+    const actionKey = `sell_${spaceId}_seq${roomSnapshot.sequenceNumber}`;
+    const requestId = getOrCreateRequestId(actionKey);
     setIsSubmittingAction(true);
     socket.emit(
       SOCKET_EVENTS.GAME_SELL_HOUSE,
-      { roomCode, spaceId, requestId: generateRequestId('sell') },
+      { roomCode, spaceId, requestId },
       (ack: SocketAck<RoomSnapshot>) => {
         setIsSubmittingAction(false);
-        if (!ack.ok) {
+        if (ack.ok) {
+          clearRequestId(actionKey);
+        } else {
           // eslint-disable-next-line no-console
           console.error('Failed to sell house:', ack.error.message);
         }
@@ -344,13 +428,17 @@ export function GameRoom({
     requestedPropertyIds: number[];
   }) => {
     if (!socket || isSubmittingAction) return;
+    const actionKey = `trade_create_${trade.receiverId}_seq${roomSnapshot.sequenceNumber}`;
+    const requestId = getOrCreateRequestId(actionKey);
     setIsSubmittingAction(true);
     socket.emit(
       SOCKET_EVENTS.GAME_TRADE_CREATE,
-      { roomCode, ...trade, requestId: generateRequestId('trade_create') },
+      { roomCode, ...trade, requestId },
       (ack: SocketAck<RoomSnapshot>) => {
         setIsSubmittingAction(false);
-        if (!ack.ok) {
+        if (ack.ok) {
+          clearRequestId(actionKey);
+        } else {
           // eslint-disable-next-line no-console
           console.error('Failed to propose trade:', ack.error.message);
         }
@@ -360,13 +448,18 @@ export function GameRoom({
 
   const handleAcceptTrade = () => {
     if (!socket || isSubmittingAction) return;
+    const tradeId = roomSnapshot.gameState?.pendingTrade?.id ?? 'trade';
+    const actionKey = `trade_accept_${tradeId}`;
+    const requestId = getOrCreateRequestId(actionKey);
     setIsSubmittingAction(true);
     socket.emit(
       SOCKET_EVENTS.GAME_TRADE_ACCEPT,
-      { roomCode, requestId: generateRequestId('trade_accept') },
+      { roomCode, requestId },
       (ack: SocketAck<RoomSnapshot>) => {
         setIsSubmittingAction(false);
-        if (!ack.ok) {
+        if (ack.ok) {
+          clearRequestId(actionKey);
+        } else {
           // eslint-disable-next-line no-console
           console.error('Failed to accept trade:', ack.error.message);
         }
@@ -376,13 +469,18 @@ export function GameRoom({
 
   const handleRejectTrade = () => {
     if (!socket || isSubmittingAction) return;
+    const tradeId = roomSnapshot.gameState?.pendingTrade?.id ?? 'trade';
+    const actionKey = `trade_reject_${tradeId}`;
+    const requestId = getOrCreateRequestId(actionKey);
     setIsSubmittingAction(true);
     socket.emit(
       SOCKET_EVENTS.GAME_TRADE_REJECT,
-      { roomCode, requestId: generateRequestId('trade_reject') },
+      { roomCode, requestId },
       (ack: SocketAck<RoomSnapshot>) => {
         setIsSubmittingAction(false);
-        if (!ack.ok) {
+        if (ack.ok) {
+          clearRequestId(actionKey);
+        } else {
           // eslint-disable-next-line no-console
           console.error('Failed to reject trade:', ack.error.message);
         }
@@ -392,13 +490,17 @@ export function GameRoom({
 
   const handleDeclareBankruptcy = () => {
     if (!socket || isSubmittingAction) return;
+    const actionKey = `bankruptcy_${currentSessionId}`;
+    const requestId = getOrCreateRequestId(actionKey);
     setIsSubmittingAction(true);
     socket.emit(
       SOCKET_EVENTS.GAME_DECLARE_BANKRUPTCY,
-      { roomCode, requestId: generateRequestId('bankruptcy') },
+      { roomCode, requestId },
       (ack: SocketAck<RoomSnapshot>) => {
         setIsSubmittingAction(false);
-        if (!ack.ok) {
+        if (ack.ok) {
+          clearRequestId(actionKey);
+        } else {
           // eslint-disable-next-line no-console
           console.error('Failed to declare bankruptcy:', ack.error.message);
         }
@@ -408,13 +510,17 @@ export function GameRoom({
 
   const handleEndTurn = () => {
     if (!socket || isSubmittingAction) return;
+    const actionKey = `end_turn_${roomSnapshot.gameState?.currentTurnIndex ?? 0}_seq${roomSnapshot.sequenceNumber}`;
+    const requestId = getOrCreateRequestId(actionKey);
     setIsSubmittingAction(true);
     socket.emit(
       SOCKET_EVENTS.GAME_END_TURN,
-      { roomCode, requestId: generateRequestId('end_turn') },
+      { roomCode, requestId },
       (ack: SocketAck<RoomSnapshot>) => {
         setIsSubmittingAction(false);
-        if (!ack.ok) {
+        if (ack.ok) {
+          clearRequestId(actionKey);
+        } else {
           // eslint-disable-next-line no-console
           console.error('Failed to end turn:', ack.error.message);
         }

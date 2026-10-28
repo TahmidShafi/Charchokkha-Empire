@@ -80,9 +80,9 @@ export class MetricsCollector {
     }
 
     const sorted = [...this.latencies].sort((a, b) => a - b);
-    const p50 = sorted[Math.floor(sorted.length * 0.5)];
-    const p95 = sorted[Math.floor(sorted.length * 0.95)];
-    const p99 = sorted[Math.floor(sorted.length * 0.99)];
+    const p50 = sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.5))];
+    const p95 = sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.95))];
+    const p99 = sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.99))];
     const errorRate = this.totalActions > 0 ? this.totalErrors / this.totalActions : 0;
 
     return {
@@ -112,3 +112,4 @@ export class MetricsCollector {
 }
 
 export const serverMetrics = new MetricsCollector();
+

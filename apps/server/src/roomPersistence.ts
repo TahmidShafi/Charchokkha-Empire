@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { RoomLifecycleState, RoomSettings } from '@charchokkha/shared';
 import type { GameState as EngineGameState } from '@charchokkha/game-engine';
-import type { GuestSession, ServerPlayer, ServerRoom, ServerSpectator } from './roomManager.js';
+import type { GuestSession, ProcessedActionRecord, ServerPlayer, ServerRoom, ServerSpectator } from './roomManager.js';
 
 export interface PersistedPlayerRecord extends ServerPlayer {
   token?: string;
@@ -20,6 +20,7 @@ export interface PersistedRoomRecord {
   spectators: ServerSpectator[];
   createdAt: number;
   gameState?: EngineGameState;
+  processedActions?: ProcessedActionRecord[];
 }
 
 export interface RestorationResult {
@@ -81,25 +82,36 @@ export class RoomPersistenceManager {
         spectators: spectatorsList,
         createdAt: room.createdAt,
         gameState: room.gameState ? JSON.parse(JSON.stringify(room.gameState)) : undefined,
+        processedActions: Array.from(room.processedActions.values()),
       };
 
       const finalPath = path.join(this.roomsDir, `room_${room.code}.json`);
       const tmpPath = path.join(this.roomsDir, `room_${room.code}.${Date.now()}.${Math.random().toString(36).slice(2, 6)}.tmp`);
 
-      fs.writeFileSync(tmpPath, JSON.stringify(record, null, 2), 'utf-8');
-      
-      // Atomic replace
       try {
-        fs.renameSync(tmpPath, finalPath);
-      } catch {
-        // Fallback for Windows cross-lock replacement
-        fs.copyFileSync(tmpPath, finalPath);
-        fs.unlinkSync(tmpPath);
+        fs.writeFileSync(tmpPath, JSON.stringify(record, null, 2), 'utf-8');
+        
+        // Atomic replace
+        try {
+          fs.renameSync(tmpPath, finalPath);
+        } catch {
+          // Fallback for Windows cross-lock replacement
+          fs.copyFileSync(tmpPath, finalPath);
+          fs.unlinkSync(tmpPath);
+        }
+      } catch (writeErr) {
+        try {
+          if (fs.existsSync(tmpPath)) {
+            fs.unlinkSync(tmpPath);
+          }
+        } catch {
+          // Ignore temp unlink error
+        }
+        throw new Error(`Failed to persist room ${room.code}: ${writeErr instanceof Error ? writeErr.message : String(writeErr)}`);
       }
     } catch (err) {
-      // Non-fatal persistence error: log and continue to prevent room crash
-      // eslint-disable-next-line no-console
-      console.warn(`[RoomPersistence] Failed to persist room ${room.code}:`, err);
+      // Re-throw persistence errors so mutations are not acknowledged if not durably saved
+      throw err;
     }
   }
 
@@ -207,6 +219,15 @@ export class RoomPersistenceManager {
             }
           }
 
+          const processedActionsMap = new Map<string, ProcessedActionRecord>();
+          if (Array.isArray(data.processedActions)) {
+            for (const item of data.processedActions) {
+              if (item && typeof item.requestId === 'string' && item.snapshot) {
+                processedActionsMap.set(item.requestId, item);
+              }
+            }
+          }
+
           const serverRoom: ServerRoom = {
             code: data.code,
             hostSessionId: data.hostSessionId,
@@ -218,7 +239,7 @@ export class RoomPersistenceManager {
             createdAt: data.createdAt,
             gameState: data.gameState,
             actionQueue: Promise.resolve(),
-            processedActions: new Map(),
+            processedActions: processedActionsMap,
           };
 
           result.rooms.push(serverRoom);

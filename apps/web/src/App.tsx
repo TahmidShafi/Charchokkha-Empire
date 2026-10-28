@@ -317,7 +317,22 @@ export default function App() {
             <span>⚠️ Network interrupted — reconnecting to match...</span>
           )}
           {connectionStatus === 'disconnected' && (
-            <span>❌ Disconnected from server. Waiting to reconnect...</span>
+            <div className="network-status-disconnected-row">
+              <span>❌ Disconnected from server.</span>
+              <button
+                type="button"
+                className="btn-network-reconnect"
+                onClick={() => {
+                  if (socket) {
+                    socket.connect();
+                  } else {
+                    window.location.reload();
+                  }
+                }}
+              >
+                Reconnect 🔄
+              </button>
+            </div>
           )}
           {connectionStatus === 'connecting' && screen === 'room' && (
             <span>🔄 Synchronizing with table...</span>

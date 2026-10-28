@@ -622,7 +622,7 @@ export function Board({
                     type="button"
                     className="btn-primary-action btn-bid-action"
                     onClick={() => onAuctionBid((gameState.auction?.currentBid ?? 0) + 10)}
-                    disabled={(myPlayerState?.cash ?? 0) < (gameState.auction?.currentBid ?? 0) + 10}
+                    disabled={(myPlayerState?.cash ?? 0) < (gameState.auction?.currentBid ?? 0) + 10 || isSubmittingAction}
                   >
                     Bid ${(gameState.auction?.currentBid ?? 0) + 10}
                   </button>
@@ -630,6 +630,7 @@ export function Board({
                     type="button"
                     className="btn-secondary-action btn-pass-action"
                     onClick={onAuctionPass}
+                    disabled={isSubmittingAction}
                   >
                     Pass
                   </button>

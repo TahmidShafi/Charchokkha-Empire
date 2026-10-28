@@ -186,15 +186,22 @@ export class RoomManager {
           timestamp: Date.now(),
         });
 
-        // Bound to 100 entries per room
-        if (room.processedActions.size > 100) {
+        // Bound to 50 entries per room
+        if (room.processedActions.size > 50) {
           const firstKey = room.processedActions.keys().next().value;
           if (firstKey) room.processedActions.delete(firstKey);
         }
       }
 
-      // Persist committed state
-      this.persistence.saveRoom(room, this.sessionsByToken);
+      // Persist committed state and durable request idempotency cache
+      try {
+        this.persistence.saveRoom(room, this.sessionsByToken);
+      } catch (err) {
+        if (requestId) {
+          room.processedActions.delete(requestId);
+        }
+        throw err;
+      }
     })();
 
     room.actionQueue = nextQueue;
