@@ -1,3 +1,4 @@
+import type { PlayerStats, PlayerStanding } from '@charchokkha/shared';
 import {
   type BoardSpace,
   type PropertyGroup,
@@ -26,6 +27,7 @@ export interface PlayerGameState {
   isBankrupt: boolean;
   inPrison: boolean;
   prisonTurns: number;
+  stats?: PlayerStats;
 }
 
 export interface LastDiceRoll {
@@ -82,6 +84,7 @@ export interface GameState {
   pendingTrade: TradeOffer | null;
   rules: GameSettingsRules;
   winnerId?: string;
+  eliminationOrder?: string[];
   chestCardIndex: number;
   chanceCardIndex: number;
   vacationPot?: number;
@@ -113,6 +116,20 @@ export function getPropertyRecord(state: GameState, spaceId: number): PropertyRe
 export function getPropertyOwnerId(state: GameState, spaceId: number): string | undefined {
   const p = getPropertyRecord(state, spaceId);
   return p?.ownerId;
+}
+
+export function getOrCreatePlayerStats(player: PlayerGameState): PlayerStats {
+  if (!player.stats) {
+    player.stats = {
+      rentPaid: 0,
+      rentReceived: 0,
+      propertiesBought: 0,
+      tradesCompleted: 0,
+      auctionsWon: 0,
+      buildingsBuilt: 0,
+    };
+  }
+  return player.stats;
 }
 
 export function createInitialGameState(
@@ -155,6 +172,7 @@ export function createInitialGameState(
     chestCardIndex: 0,
     chanceCardIndex: 0,
     vacationPot: 0,
+    eliminationOrder: [],
     lastActionMessage: 'Game started. Player 1 turn to roll.',
   };
 }
@@ -162,7 +180,10 @@ export function createInitialGameState(
 export function cloneGameState(state: GameState): GameState {
   const clonedPlayers: Record<string, PlayerGameState> = {};
   for (const [id, player] of Object.entries(state.players)) {
-    clonedPlayers[id] = { ...player };
+    clonedPlayers[id] = {
+      ...player,
+      stats: player.stats ? { ...player.stats } : undefined,
+    };
   }
 
   const clonedProperties: Record<number, PropertyRecord> = {};
@@ -175,6 +196,7 @@ export function cloneGameState(state: GameState): GameState {
   return {
     ...state,
     turnOrder: [...state.turnOrder],
+    eliminationOrder: state.eliminationOrder ? [...state.eliminationOrder] : [],
     players: clonedPlayers,
     properties: clonedProperties,
     lastDiceRoll: state.lastDiceRoll ? { ...state.lastDiceRoll } : null,
@@ -341,8 +363,10 @@ export function processRollDice(
       if (rentAmount > 0) {
         const rentPaid = Math.min(player.cash, rentAmount);
         player.cash -= rentPaid;
+        getOrCreatePlayerStats(player).rentPaid += rentPaid;
         if (owner) {
           owner.cash += rentPaid;
+          getOrCreatePlayerStats(owner).rentReceived += rentPaid;
         }
         actionSummary += ` Owned by ${owner?.id ?? 'player'}. Paid $${rentPaid} rent.`;
       } else {
@@ -434,6 +458,7 @@ export function processBuyProperty(state: GameState, playerId: string): EngineAc
   const nextState = cloneGameState(state);
   const nextPlayer = nextState.players[playerId];
   nextPlayer.cash -= space.price;
+  getOrCreatePlayerStats(nextPlayer).propertiesBought += 1;
   nextState.properties[spaceId] = { ownerId: playerId, houses: 0, isMortgaged: false };
   nextState.turnPhase = 'turn_ended';
 
@@ -532,6 +557,9 @@ export function processAuctionPass(state: GameState, playerId: string): EngineAc
     if (highBidderId && nextState.auction!.currentBid > 0) {
       const winner = nextState.players[highBidderId];
       winner.cash -= nextState.auction!.currentBid;
+      const winnerStats = getOrCreatePlayerStats(winner);
+      winnerStats.auctionsWon += 1;
+      winnerStats.propertiesBought += 1;
       nextState.properties[space.id] = { ownerId: highBidderId, houses: 0, isMortgaged: false };
       nextState.lastActionMessage = `Auction ended! ${highBidderId} won ${space.name} for $${nextState.auction!.currentBid}.`;
     } else {
@@ -544,6 +572,9 @@ export function processAuctionPass(state: GameState, playerId: string): EngineAc
     const winnerId = highBidderId;
     const winner = nextState.players[winnerId];
     winner.cash -= nextState.auction!.currentBid;
+    const winnerStats = getOrCreatePlayerStats(winner);
+    winnerStats.auctionsWon += 1;
+    winnerStats.propertiesBought += 1;
     nextState.properties[space.id] = { ownerId: winnerId, houses: 0, isMortgaged: false };
     nextState.lastActionMessage = `Auction ended! ${winnerId} won ${space.name} for $${nextState.auction!.currentBid}.`;
     nextState.auction = null;
@@ -672,7 +703,9 @@ export function processBuildHouse(state: GameState, playerId: string, spaceId: n
   }
 
   const nextState = cloneGameState(state);
-  nextState.players[playerId].cash -= space.houseCost;
+  const nextPlayer = nextState.players[playerId];
+  nextPlayer.cash -= space.houseCost;
+  getOrCreatePlayerStats(nextPlayer).buildingsBuilt += 1;
   nextState.properties[spaceId].houses += 1;
   const newCount = nextState.properties[spaceId].houses;
   const houseLabel = newCount === 5 ? 'Hotel' : `${newCount} House(s)`;
@@ -822,9 +855,15 @@ export function processAcceptTrade(state: GameState, receiverId: string): Engine
   }
 
   const nextState = cloneGameState(state);
+  const nextSender = nextState.players[trade.senderId];
+  const nextReceiver = nextState.players[trade.receiverId];
+
   // Transfer cash
-  nextState.players[trade.senderId].cash += trade.requestedCash - trade.offeredCash;
-  nextState.players[trade.receiverId].cash += trade.offeredCash - trade.requestedCash;
+  nextSender.cash += trade.requestedCash - trade.offeredCash;
+  nextReceiver.cash += trade.offeredCash - trade.requestedCash;
+
+  getOrCreatePlayerStats(nextSender).tradesCompleted += 1;
+  getOrCreatePlayerStats(nextReceiver).tradesCompleted += 1;
 
   // Transfer properties
   for (const sId of trade.offeredPropertyIds) {
@@ -873,6 +912,12 @@ export function processDeclareBankruptcy(state: GameState, playerId: string, cre
   const nextState = cloneGameState(state);
   const nextPlayer = nextState.players[playerId];
   nextPlayer.isBankrupt = true;
+
+  if (!nextState.eliminationOrder) {
+    nextState.eliminationOrder = [];
+  }
+  nextState.eliminationOrder.push(playerId);
+  getOrCreatePlayerStats(nextPlayer).bankruptcyOrder = nextState.eliminationOrder.length;
 
   // Transfer cash and properties
   const creditor = creditorId ? nextState.players[creditorId] : undefined;
@@ -947,4 +992,173 @@ export function processEndTurn(state: GameState, playerId: string): EngineAction
   nextState.lastActionMessage = actionSummary;
 
   return { success: true, state: nextState };
+}
+
+export interface StandingsStateInput {
+  phase?: GameLifecyclePhase | string;
+  players: Record<string, PlayerGameState>;
+  properties: Record<string | number, PropertyRecord | string>;
+  winnerId?: string;
+  eliminationOrder?: string[];
+}
+
+/**
+ * Authoritatively calculates net worth for a player:
+ * - Bankrupt player: 0
+ * - Cash: player.cash
+ * - Unmortgaged property: space.price
+ * - Mortgaged property: Math.floor(space.price / 2)
+ * - Houses (1-4): houses * houseCost
+ * - Hotel (houses === 5): 5 * houseCost
+ */
+export function calculatePlayerNetWorth(
+  state: {
+    players: Record<string, PlayerGameState>;
+    properties: Record<string | number, PropertyRecord | string>;
+  },
+  playerId: string
+): number {
+  const player = state.players[playerId];
+  if (!player || player.isBankrupt) {
+    return 0;
+  }
+
+  let total = player.cash;
+
+  for (const [spaceIdStr, prop] of Object.entries(state.properties)) {
+    const sId = Number(spaceIdStr);
+    const rec = typeof prop === 'string' ? { ownerId: prop, houses: 0, isMortgaged: false } : prop;
+    if (rec.ownerId === playerId) {
+      const space = getBoardSpace(sId);
+      if (space && space.price) {
+        if (rec.isMortgaged) {
+          total += Math.floor(space.price / 2);
+        } else {
+          total += space.price;
+        }
+
+        if (rec.houses > 0 && space.houseCost) {
+          total += rec.houses * space.houseCost;
+        }
+      }
+    }
+  }
+
+  return total;
+}
+
+/**
+ * Calculates final competitive tournament player standings:
+ * 1. Winner is #1 if state.winnerId is defined.
+ * 2. Active (non-bankrupt) players ranked descending by net worth (tie-breaker: cash).
+ * 3. Bankrupt players ranked in reverse order of elimination (last eliminated ranks higher).
+ */
+export function calculateStandings(
+  state: StandingsStateInput,
+  roomPlayers: Array<{ id: string; nickname?: string; avatar?: string }> = []
+): PlayerStanding[] {
+  const playerMap = new Map<string, { id: string; nickname: string; avatar: string }>();
+  for (const rp of roomPlayers) {
+    playerMap.set(rp.id, {
+      id: rp.id,
+      nickname: rp.nickname || `Player ${rp.id.slice(0, 4)}`,
+      avatar: rp.avatar || '🟢',
+    });
+  }
+
+  const allPlayerIds = Object.keys(state.players);
+
+  // Group into active vs bankrupt
+  const activeIds: string[] = [];
+  const bankruptIds: string[] = [];
+
+  for (const id of allPlayerIds) {
+    if (state.players[id].isBankrupt) {
+      bankruptIds.push(id);
+    } else {
+      activeIds.push(id);
+    }
+  }
+
+  // Active players sorting:
+  // If winnerId is set and in activeIds, winnerId is placed first.
+  // Other active players are sorted by netWorth desc, then cash desc.
+  const activeWithNetWorth = activeIds.map((id) => ({
+    id,
+    netWorth: calculatePlayerNetWorth(state, id),
+    cash: state.players[id].cash,
+  }));
+
+  activeWithNetWorth.sort((a, b) => {
+    if (state.winnerId) {
+      if (a.id === state.winnerId) return -1;
+      if (b.id === state.winnerId) return 1;
+    }
+    if (b.netWorth !== a.netWorth) {
+      return b.netWorth - a.netWorth;
+    }
+    return b.cash - a.cash;
+  });
+
+  // Bankrupt players sorting:
+  // Reverse elimination order (last eliminated ranks higher).
+  const elimOrder = state.eliminationOrder ?? [];
+  bankruptIds.sort((a, b) => {
+    const idxA = elimOrder.indexOf(a);
+    const idxB = elimOrder.indexOf(b);
+    if (idxA !== -1 && idxB !== -1) {
+      return idxB - idxA;
+    }
+    const orderA = state.players[a].stats?.bankruptcyOrder ?? 0;
+    const orderB = state.players[b].stats?.bankruptcyOrder ?? 0;
+    if (orderA !== orderB) {
+      return orderB - orderA;
+    }
+    return 0;
+  });
+
+  const sortedPlayerIds = [
+    ...activeWithNetWorth.map((p) => p.id),
+    ...bankruptIds,
+  ];
+
+  const standings: PlayerStanding[] = sortedPlayerIds.map((id, index) => {
+    const playerState = state.players[id];
+    const rp = playerMap.get(id);
+
+    // Collect owned properties
+    const ownedProperties: number[] = [];
+    for (const [spaceIdStr, prop] of Object.entries(state.properties)) {
+      const sId = Number(spaceIdStr);
+      const rec = typeof prop === 'string' ? { ownerId: prop } : prop;
+      if (rec.ownerId === id) {
+        ownedProperties.push(sId);
+      }
+    }
+    ownedProperties.sort((a, b) => a - b);
+
+    return {
+      rank: index + 1,
+      playerId: id,
+      nickname: rp?.nickname || `Player ${id.slice(0, 4)}`,
+      avatar: rp?.avatar || '🟢',
+      netWorth: calculatePlayerNetWorth(state, id),
+      cash: playerState.cash,
+      isBankrupt: playerState.isBankrupt,
+      propertyCount: ownedProperties.length,
+      properties: ownedProperties,
+      stats: playerState.stats
+        ? { ...playerState.stats }
+        : {
+            rentPaid: 0,
+            rentReceived: 0,
+            propertiesBought: 0,
+            tradesCompleted: 0,
+            auctionsWon: 0,
+            buildingsBuilt: 0,
+          },
+    };
+  });
+
+  return standings;
 }

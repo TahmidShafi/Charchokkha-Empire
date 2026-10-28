@@ -15,6 +15,7 @@ export const SOCKET_EVENTS = {
   ROOM_CREATE: 'room:create',
   ROOM_JOIN: 'room:join',
   ROOM_SPECTATE: 'room:spectate',
+  ROOM_REMATCH: 'room:rematch',
   ROOM_LEAVE: 'room:leave',
   ROOM_UPDATE_SETTINGS: 'room:update_settings',
   ROOM_GET_SNAPSHOT: 'room:get_snapshot',
@@ -159,6 +160,33 @@ export const TurnPhaseSchema = z.enum([
 
 export type TurnPhase = z.infer<typeof TurnPhaseSchema>;
 
+export const PlayerStatsSchema = z.object({
+  rentPaid: z.number().int().nonnegative().default(0),
+  rentReceived: z.number().int().nonnegative().default(0),
+  propertiesBought: z.number().int().nonnegative().default(0),
+  tradesCompleted: z.number().int().nonnegative().default(0),
+  auctionsWon: z.number().int().nonnegative().default(0),
+  buildingsBuilt: z.number().int().nonnegative().default(0),
+  bankruptcyOrder: z.number().int().positive().optional(),
+});
+
+export type PlayerStats = z.infer<typeof PlayerStatsSchema>;
+
+export const PlayerStandingSchema = z.object({
+  rank: z.number().int().positive(),
+  playerId: z.string(),
+  nickname: z.string(),
+  avatar: z.string(),
+  netWorth: z.number().int(),
+  cash: z.number().int(),
+  isBankrupt: z.boolean(),
+  propertyCount: z.number().int().nonnegative(),
+  properties: z.array(z.number().int()),
+  stats: PlayerStatsSchema.optional(),
+});
+
+export type PlayerStanding = z.infer<typeof PlayerStandingSchema>;
+
 export const PlayerGameStateSchema = z.object({
   id: z.string(),
   position: z.number().int().min(0).max(39),
@@ -166,6 +194,7 @@ export const PlayerGameStateSchema = z.object({
   isBankrupt: z.boolean().default(false),
   inPrison: z.boolean().default(false),
   prisonTurns: z.number().int().default(0),
+  stats: PlayerStatsSchema.optional(),
 });
 
 export type PlayerGameState = z.infer<typeof PlayerGameStateSchema>;
@@ -234,6 +263,7 @@ export const GameStateSchema = z.object({
   pendingTrade: TradeOfferSchema.nullable().optional(),
   rules: GameSettingsRulesSchema.optional(),
   winnerId: z.string().optional(),
+  eliminationOrder: z.array(z.string()).optional(),
   chestCardIndex: z.number().int().optional(),
   chanceCardIndex: z.number().int().optional(),
   vacationPot: z.number().int().nonnegative().optional(),
@@ -312,6 +342,12 @@ export const GetSnapshotPayloadSchema = z.object({
 export type GetSnapshotPayload = z.infer<typeof GetSnapshotPayloadSchema>;
 
 // Action Payloads: Game
+export const RematchPayloadSchema = z.object({
+  roomCode: z.string().trim().min(3).max(10),
+});
+
+export type RematchPayload = z.infer<typeof RematchPayloadSchema>;
+
 export const StartGamePayloadSchema = z.object({
   roomCode: z.string().trim().min(3).max(10),
 });
