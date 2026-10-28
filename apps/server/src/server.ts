@@ -13,6 +13,7 @@ import {
   SendChatPayloadSchema,
   UpdateSettingsPayloadSchema,
   StartGamePayloadSchema,
+  RematchPayloadSchema,
   RollDicePayloadSchema,
   BuyPropertyPayloadSchema,
   DeclinePropertyPayloadSchema,
@@ -497,6 +498,43 @@ export function createAppServer(options: ServerOptions = {}) {
           if (msg.includes('host') || msg.includes('Spectator') || msg.includes('not permitted')) code = 'FORBIDDEN';
           else if (msg.includes('At least 2 players')) code = 'INSUFFICIENT_PLAYERS';
           else if (msg.includes('already in progress')) code = 'GAME_ALREADY_STARTED';
+          const err: SocketError = { code, message: msg };
+          if (typeof ack === 'function') ack({ ok: false, error: err });
+        }
+      }
+    );
+
+    // --- Room: Rematch (Host Only, Finished Room Only) ---
+    socket.on(
+      SOCKET_EVENTS.ROOM_REMATCH,
+      async (rawPayload: unknown, ack?: (response: SocketAck<RoomSnapshot>) => void) => {
+        const parsed = RematchPayloadSchema.safeParse(rawPayload);
+        if (!parsed.success) {
+          const err: SocketError = {
+            code: 'INVALID_PAYLOAD',
+            message: 'Validation failed: ' + parsed.error.issues.map((i) => i.message).join(', '),
+            details: parsed.error.flatten(),
+          };
+          if (typeof ack === 'function') ack({ ok: false, error: err });
+          return;
+        }
+
+        const roomCode = parsed.data.roomCode.trim().toUpperCase();
+
+        try {
+          const snapshot = await roomManager.enqueueRoomAction(roomCode, () => {
+            return roomManager.rematchRoom(session, roomCode);
+          });
+
+          if (typeof ack === 'function') {
+            ack({ ok: true, data: snapshot });
+          }
+
+          io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.ROOM_UPDATED, snapshot);
+        } catch (error: unknown) {
+          const msg = error instanceof Error ? error.message : 'Failed to initiate rematch';
+          let code = 'REMATCH_FAILED';
+          if (msg.includes('host') || msg.includes('Spectator') || msg.includes('not permitted')) code = 'FORBIDDEN';
           const err: SocketError = { code, message: msg };
           if (typeof ack === 'function') ack({ ok: false, error: err });
         }

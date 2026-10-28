@@ -587,6 +587,33 @@ export class RoomManager {
   }
 
   /**
+   * Host-only: resets the finished room back to 'waiting' for a rematch.
+   */
+  public rematchRoom(session: GuestSession, roomCode: string): RoomSnapshot {
+    const code = roomCode.trim().toUpperCase();
+    const room = this.rooms.get(code);
+    if (!room) {
+      throw new Error(`Room not found: ${code}`);
+    }
+
+    this.ensureSeatedPlayer(room, session);
+
+    if (room.hostSessionId !== session.sessionId) {
+      throw new Error('Only the room host can initiate a rematch');
+    }
+
+    if (room.state !== 'finished') {
+      throw new Error(`Cannot rematch when game is in '${room.state}' state`);
+    }
+
+    room.state = 'waiting';
+    room.gameState = undefined;
+    room.sequenceNumber += 1;
+
+    return this.toSnapshot(room);
+  }
+
+  /**
    * Authoritative dice roll for active player using server randomness.
    */
   public rollDice(
