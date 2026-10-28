@@ -50,10 +50,16 @@ export function GameRoom({
   const roomCode = roomSnapshot.code;
   const roomUrl = `${window.location.origin}/?room=${roomCode}`;
 
+  const isSpectator = Boolean(
+    roomSnapshot &&
+    currentSessionId &&
+    !roomSnapshot.players.some((p: Player) => p.id === currentSessionId)
+  );
+
   const currentPlayer = roomSnapshot.players.find((p: Player) => p.id === currentSessionId);
-  const isHost = currentSessionId === roomSnapshot.hostId;
-  const currentAvatar = currentPlayer?.avatar || AVATAR_OPTIONS[avatarIndex];
-  const playerName = currentPlayer?.nickname || 'Guest';
+  const isHost = !isSpectator && currentSessionId === roomSnapshot.hostId;
+  const currentAvatar = currentPlayer?.avatar || (isSpectator ? '👁️' : AVATAR_OPTIONS[avatarIndex]);
+  const playerName = currentPlayer?.nickname || (isSpectator ? 'Spectator' : 'Guest');
 
   const handleCopyLink = () => {
     navigator.clipboard.writeText(roomUrl);
@@ -337,6 +343,25 @@ export function GameRoom({
 
         {/* Header Right Actions */}
         <div className="header-actions-group">
+          {/* Spectator Mode Indicator */}
+          {isSpectator && (
+            <div className="header-spectator-pill" title="You are spectating this table (Read-Only)">
+              <span className="spectator-eye-icon" aria-hidden="true">👁️</span>
+              <span className="spectator-badge-text">SPECTATING</span>
+            </div>
+          )}
+
+          {/* Spectator Count Pill */}
+          {(roomSnapshot.spectatorCount ?? 0) > 0 && (
+            <div
+              className="header-spectator-count-pill"
+              title={`${roomSnapshot.spectatorCount} spectator(s) watching this table`}
+            >
+              <span className="spectator-eye-icon" aria-hidden="true">👁️</span>
+              <span className="spectator-count-num">{roomSnapshot.spectatorCount}</span>
+            </div>
+          )}
+
           {/* Real-time sync status pill */}
           <div className="header-sync-pill" title="Server State Synchronized">
             <span className="status-live-dot" aria-hidden="true" />
@@ -448,6 +473,13 @@ export function GameRoom({
       </section>
 
       {/* ==================== 3. MAIN STAGE / CONTENT LAYOUT ==================== */}
+      {isSpectator && (
+        <div className="spectator-top-alert-strip" role="status">
+          <span className="spectator-eye-icon" aria-hidden="true">👁️</span>
+          <span>You are spectating this match in real-time. Player actions and table controls are read-only.</span>
+        </div>
+      )}
+
       <div className="room-main-stage-container">
         {/* Left Column: Desktop Chat (Collapsible) */}
         {isDesktopChatOpen && (
@@ -465,6 +497,7 @@ export function GameRoom({
               roomSnapshot={roomSnapshot}
               currentSessionId={currentSessionId}
               isHost={isHost}
+              isSpectator={isSpectator}
               onStartGame={handleStartGame}
               onRollDice={handleRollDice}
               onBuyProperty={handleBuyProperty}
@@ -497,6 +530,7 @@ export function GameRoom({
                 playerName={playerName}
                 playerAvatar={currentAvatar}
                 isHost={isHost}
+                isSpectator={isSpectator}
                 players={roomSnapshot.players}
                 onAvatarChange={handleCycleAvatar}
                 maxPlayers={roomSnapshot.settings.maxPlayers}
@@ -524,6 +558,7 @@ export function GameRoom({
               playerName={playerName}
               playerAvatar={currentAvatar}
               isHost={isHost}
+              isSpectator={isSpectator}
               players={roomSnapshot.players}
               onAvatarChange={handleCycleAvatar}
               maxPlayers={roomSnapshot.settings.maxPlayers}

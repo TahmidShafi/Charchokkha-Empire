@@ -15,6 +15,7 @@ export interface BoardProps {
   roomSnapshot: RoomSnapshot;
   currentSessionId: string;
   isHost: boolean;
+  isSpectator?: boolean;
   onStartGame: () => void;
   onRollDice: () => void;
   onBuyProperty: () => void;
@@ -45,6 +46,7 @@ export function Board({
   roomSnapshot,
   currentSessionId,
   isHost,
+  isSpectator = false,
   onStartGame,
   onRollDice,
   onBuyProperty,
@@ -67,7 +69,7 @@ export function Board({
   const isGameStarted = (roomSnapshot.state === 'in_progress' || roomSnapshot.state === 'finished') && !!gameState;
   const isGameFinished = roomSnapshot.state === 'finished' || gameState?.phase === 'finished';
   const activePlayerId = gameState?.activePlayerId;
-  const isMyTurn = isGameStarted && activePlayerId === currentSessionId && !isGameFinished;
+  const isMyTurn = !isSpectator && isGameStarted && activePlayerId === currentSessionId && !isGameFinished;
   const activePlayer = roomSnapshot.players.find((p: Player) => p.id === activePlayerId);
   const myPlayerState = gameState?.players[currentSessionId];
   const myPosition = myPlayerState?.position ?? 0;
@@ -541,7 +543,12 @@ export function Board({
           {/* Turn Status Banner */}
           {isGameStarted && !isGameFinished && (
             <div className="courtyard-turn-status-bar">
-              {isMyTurn ? (
+              {isSpectator ? (
+                <span className="turn-indicator-badge turn-badge-spectator">
+                  <span className="spectator-eye-icon" aria-hidden="true">👁️</span>
+                  <span>Spectating — {activePlayer?.nickname ?? 'Player'}&apos;s turn</span>
+                </span>
+              ) : isMyTurn ? (
                 <span className="turn-indicator-badge turn-badge-mine">
                   <span className="pulsing-turn-dot" aria-hidden="true" />
                   <span>🎯 YOUR TURN</span>
@@ -564,7 +571,7 @@ export function Board({
           )}
 
           {/* In Prison Status Notice */}
-          {myPlayerState?.inPrison && isMyTurn && !isGameFinished && (
+          {!isSpectator && myPlayerState?.inPrison && isMyTurn && !isGameFinished && (
             <div className="courtyard-prison-banner" role="alert">
               <span>⛓️ In Prison (Turn attempt {myPlayerState.prisonTurns}/3)</span>
             </div>
@@ -592,7 +599,11 @@ export function Board({
                   : 'No bids placed yet'}
               </div>
 
-              {gameState.auction.activeBidders.includes(currentSessionId) ? (
+              {isSpectator ? (
+                <div className="auction-spectator-note">
+                  👁️ Spectating Auction (Read-Only)
+                </div>
+              ) : gameState.auction.activeBidders.includes(currentSessionId) ? (
                 <div className="auction-buttons-row">
                   <button
                     type="button"
@@ -618,12 +629,12 @@ export function Board({
 
           {/* Tactile 3D Dice Pair Stage */}
           <div
-            className={`courtyard-dice-stage ${isMyTurn && turnPhase === 'need_roll' ? 'dice-clickable' : ''}`}
-            onClick={isMyTurn && turnPhase === 'need_roll' && !isRolling ? onRollDice : undefined}
-            title={isMyTurn && turnPhase === 'need_roll' ? 'Click to roll dice' : undefined}
-            role="button"
+            className={`courtyard-dice-stage ${!isSpectator && isMyTurn && turnPhase === 'need_roll' ? 'dice-clickable' : ''}`}
+            onClick={!isSpectator && isMyTurn && turnPhase === 'need_roll' && !isRolling ? onRollDice : undefined}
+            title={!isSpectator && isMyTurn && turnPhase === 'need_roll' ? 'Click to roll dice' : undefined}
+            role={!isSpectator && isMyTurn && turnPhase === 'need_roll' ? 'button' : undefined}
             aria-label="Roll dice pair"
-            tabIndex={isMyTurn && turnPhase === 'need_roll' ? 0 : -1}
+            tabIndex={!isSpectator && isMyTurn && turnPhase === 'need_roll' ? 0 : -1}
           >
             <div className={`tactile-dice-cube ${isRolling || isDiceAnimating ? 'rolling-wobble' : ''}`}>
               {renderDiePips(dice.die1)}
@@ -646,7 +657,18 @@ export function Board({
 
           {/* Contextual Action Buttons */}
           <div className="courtyard-action-controls">
-            {!isGameStarted ? (
+            {isSpectator ? (
+              <div className="spectator-controls-card" role="status">
+                <span className="spectator-eye-large" aria-hidden="true">👁️</span>
+                <span className="spectator-controls-text">
+                  {!isGameStarted
+                    ? 'Spectating Table — Waiting for host to start match'
+                    : isGameFinished
+                    ? 'Match Finished — Spectating complete'
+                    : `Spectating Table — ${activePlayer?.nickname ?? 'Player'}'s turn`}
+                </span>
+              </div>
+            ) : !isGameStarted ? (
               isHost ? (
                 <>
                   <button
@@ -754,7 +776,7 @@ export function Board({
             )}
 
             {/* In-Game Utility Buttons: Trade & Bankruptcy */}
-            {isGameStarted && !isGameFinished && (
+            {!isSpectator && isGameStarted && !isGameFinished && (
               <div className="courtyard-sub-actions-row">
                 <button
                   type="button"
@@ -851,6 +873,9 @@ export function Board({
                 <h2 id="prop-modal-title" className="dialog-title-text">
                   {selectedSpace.name}
                 </h2>
+                {isSpectator && (
+                  <span className="prop-spectator-chip">👁️ Spectating</span>
+                )}
               </div>
               <button
                 type="button"

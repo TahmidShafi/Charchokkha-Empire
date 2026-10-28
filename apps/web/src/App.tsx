@@ -117,6 +117,30 @@ export default function App() {
       ]);
     });
 
+    s.on(SOCKET_EVENTS.ROOM_SPECTATOR_JOINED, (data: { nickname: string }) => {
+      setChatMessages((prev) => [
+        ...prev,
+        {
+          id: `spec_join_${Date.now()}_${Math.random()}`,
+          sender: 'System',
+          text: `👁️ ${data.nickname} is now spectating this table.`,
+          isSystem: true,
+        },
+      ]);
+    });
+
+    s.on(SOCKET_EVENTS.ROOM_SPECTATOR_LEFT, (data: { nickname: string }) => {
+      setChatMessages((prev) => [
+        ...prev,
+        {
+          id: `spec_leave_${Date.now()}_${Math.random()}`,
+          sender: 'System',
+          text: `👁️ ${data.nickname} left spectator mode.`,
+          isSystem: true,
+        },
+      ]);
+    });
+
     // 5. Chat messages
     s.on(SOCKET_EVENTS.CHAT_MESSAGE, (msg: ChatMessageBroadcast) => {
       setChatMessages((prev) => [
@@ -205,6 +229,39 @@ export default function App() {
     );
   };
 
+  const handleSpectateByCode = (code: string) => {
+    if (!socket) {
+      setServerError('Connecting to game server...');
+      return;
+    }
+    setServerError('');
+
+    socket.emit(
+      SOCKET_EVENTS.ROOM_SPECTATE,
+      {
+        roomCode: code,
+        nickname: nickname.trim() || 'Spectator',
+      },
+      (ack: SocketAck<RoomSnapshot>) => {
+        if (!ack.ok) {
+          setServerError(ack.error.message);
+          return;
+        }
+        lastSequenceRef.current = ack.data.sequenceNumber;
+        setRoomSnapshot(ack.data);
+        setChatMessages([
+          {
+            id: `init_${Date.now()}`,
+            sender: 'System',
+            text: `👁️ Spectating table ${ack.data.code} in real-time. Actions are read-only.`,
+            isSystem: true,
+          },
+        ]);
+        setScreen('room');
+      }
+    );
+  };
+
   const handleExitToMenu = () => {
     if (socket && roomSnapshot) {
       socket.emit(SOCKET_EVENTS.ROOM_LEAVE, { roomCode: roomSnapshot.code });
@@ -228,6 +285,7 @@ export default function App() {
           onPlay={(avatar) => handleCreateRoom(avatar, false)}
           onCreatePrivate={(avatar) => handleCreateRoom(avatar, true)}
           onJoinByCode={handleJoinByCode}
+          onSpectateByCode={handleSpectateByCode}
           serverError={serverError}
         />
       ) : (

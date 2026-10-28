@@ -5,6 +5,7 @@ export interface GameSettingsProps {
   playerName: string;
   playerAvatar: string;
   isHost: boolean;
+  isSpectator?: boolean;
   players: Player[];
   onAvatarChange: () => void;
   maxPlayers: number;
@@ -27,6 +28,7 @@ export function GameSettings({
   playerName,
   playerAvatar,
   isHost,
+  isSpectator = false,
   players,
   onAvatarChange,
   maxPlayers,
@@ -75,31 +77,39 @@ export function GameSettings({
         {/* Card 1: Player Identity Card */}
         <div className="settings-section-card">
           <div className="player-profile-row">
-            <div className="player-avatar-badge" title="Your avatar">
-              <span>{playerAvatar}</span>
+            <div className="player-avatar-badge" title={isSpectator ? 'Spectating Table' : 'Your avatar'}>
+              <span>{isSpectator ? '👁️' : playerAvatar}</span>
             </div>
             <div className="player-text-meta">
               <div className="player-name-line">
                 <span className="name-bold">{playerName}</span>
-                {isHost ? (
+                {isSpectator ? (
+                  <span className="spectator-pill-badge">👁️ Spectator</span>
+                ) : isHost ? (
                   <span className="host-pill-badge">👑 Host</span>
                 ) : (
                   <span className="player-pill-badge">Player</span>
                 )}
               </div>
               <div className="player-sub-text">
-                {isHost ? 'You can configure game rules' : 'Host controls table rules'}
+                {isSpectator
+                  ? 'Watching table in read-only mode'
+                  : isHost
+                  ? 'You can configure game rules'
+                  : 'Host controls table rules'}
               </div>
             </div>
           </div>
 
-          <button
-            type="button"
-            className="btn-secondary-action btn-change-token"
-            onClick={onAvatarChange}
-          >
-            <span>🎨</span> Change Token
-          </button>
+          {!isSpectator && (
+            <button
+              type="button"
+              className="btn-secondary-action btn-change-token"
+              onClick={onAvatarChange}
+            >
+              <span>🎨</span> Change Token
+            </button>
+          )}
         </div>
 
         {/* Audio & Sound Effects */}

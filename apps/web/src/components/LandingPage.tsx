@@ -6,6 +6,7 @@ export interface LandingPageProps {
   onPlay: (avatar?: string) => void;
   onCreatePrivate: (avatar?: string) => void;
   onJoinByCode: (code: string, avatar?: string) => void;
+  onSpectateByCode?: (code: string) => void;
   serverError?: string;
   isConnecting?: boolean;
 }
@@ -18,6 +19,7 @@ export function LandingPage({
   onPlay,
   onCreatePrivate,
   onJoinByCode,
+  onSpectateByCode,
   serverError,
   isConnecting = false,
 }: LandingPageProps) {
@@ -288,6 +290,31 @@ export function LandingPage({
               Enter the unique 5 or 6-character room code shared by your host.
             </p>
 
+            {serverError && (serverError.toLowerCase().includes('capacity') || serverError.toLowerCase().includes('full')) && (
+              <div className="room-full-spectate-prompt" role="alert">
+                <div className="prompt-header">
+                  <span className="prompt-icon" aria-hidden="true">👁️</span>
+                  <strong>Table Full — Spectate Match</strong>
+                </div>
+                <p className="prompt-desc">
+                  This table is at maximum player capacity. You can still watch the game live in read-only spectator mode!
+                </p>
+                {onSpectateByCode && (
+                  <button
+                    type="button"
+                    id="btn-spectate-full-cta"
+                    className="btn-primary-action btn-spectate-full-cta"
+                    onClick={() => {
+                      const cleanCode = joinCodeInput.trim().toUpperCase();
+                      if (cleanCode) onSpectateByCode(cleanCode);
+                    }}
+                  >
+                    Watch Table Live 👁️
+                  </button>
+                )}
+              </div>
+            )}
+
             <form onSubmit={handleJoinSubmit} className="dialog-form-body">
               <div className="input-group-wrapper">
                 <input
@@ -310,13 +337,28 @@ export function LandingPage({
                 >
                   Cancel
                 </button>
+                {onSpectateByCode && (
+                  <button
+                    id="btn-spectate-code"
+                    type="button"
+                    className="btn-secondary-action btn-spectate-modal-btn"
+                    disabled={!joinCodeInput.trim()}
+                    onClick={() => {
+                      const cleanCode = joinCodeInput.trim().toUpperCase();
+                      if (cleanCode) onSpectateByCode(cleanCode);
+                    }}
+                    title="Watch game as a read-only spectator"
+                  >
+                    <span>👁️ Spectate</span>
+                  </button>
+                )}
                 <button
                   id="btn-submit-join-code"
                   type="submit"
                   className="btn-primary-action"
                   disabled={!joinCodeInput.trim()}
                 >
-                  Enter Table →
+                  Join Table →
                 </button>
               </div>
             </form>
