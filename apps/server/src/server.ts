@@ -38,11 +38,13 @@ import {
   type SocketError,
 } from '@charchokkha/shared';
 import { RoomManager } from './roomManager.js';
+import { serverMetrics } from './metrics.js';
 
 export interface ServerOptions {
   port?: number;
   host?: string;
   allowedOrigins?: string[];
+  persistenceDir?: string;
 }
 
 export function createAppServer(options: ServerOptions = {}) {
@@ -54,7 +56,7 @@ export function createAppServer(options: ServerOptions = {}) {
   ];
 
   const startTime = Date.now();
-  const roomManager = new RoomManager();
+  const roomManager = new RoomManager(options.persistenceDir);
 
   const httpServer = http.createServer((req, res) => {
     const origin = req.headers.origin;
@@ -79,6 +81,7 @@ export function createAppServer(options: ServerOptions = {}) {
         service: 'charchokkha-server',
         uptime: Math.round((Date.now() - startTime) / 1000),
         timestamp: new Date().toISOString(),
+        metrics: serverMetrics.getSummary() as unknown as Record<string, unknown>,
       };
 
       const validation = HealthCheckResponseSchema.safeParse(healthData);
@@ -90,6 +93,12 @@ export function createAppServer(options: ServerOptions = {}) {
 
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(validation.data));
+      return;
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/metrics') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(serverMetrics.getSummary()));
       return;
     }
 
@@ -243,7 +252,7 @@ export function createAppServer(options: ServerOptions = {}) {
           }
 
           if (parsed.data.asSpectator) {
-            const snapshot = await roomManager.enqueueRoomAction(roomCode, () => {
+            const { result: snapshot } = await roomManager.enqueueRoomAction(roomCode, () => {
               return roomManager.spectateRoom(session, roomCode, parsed.data.nickname);
             });
 
@@ -264,7 +273,7 @@ export function createAppServer(options: ServerOptions = {}) {
           }
 
           // Apply join through per-room action queue
-          const { snapshot, isReconnect } = await roomManager.enqueueRoomAction(roomCode, () => {
+          const { result: { snapshot, isReconnect } } = await roomManager.enqueueRoomAction(roomCode, () => {
             return roomManager.joinRoom(
               session,
               roomCode,
@@ -283,6 +292,7 @@ export function createAppServer(options: ServerOptions = {}) {
           io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.ROOM_UPDATED, snapshot);
 
           if (isReconnect) {
+            serverMetrics.recordReconnection(true);
             io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.ROOM_PLAYER_RECONNECTED, {
               playerId: session.sessionId,
               nickname: session.nickname,
@@ -294,6 +304,7 @@ export function createAppServer(options: ServerOptions = {}) {
             });
           }
         } catch (error: unknown) {
+          serverMetrics.recordReconnection(false);
           const msg = error instanceof Error ? error.message : 'Failed to join room';
           const code = msg.includes('capacity') ? 'ROOM_FULL' : 'ROOM_JOIN_FAILED';
           const err: SocketError = { code, message: msg };
@@ -327,7 +338,7 @@ export function createAppServer(options: ServerOptions = {}) {
             return;
           }
 
-          const snapshot = await roomManager.enqueueRoomAction(roomCode, () => {
+          const { result: snapshot } = await roomManager.enqueueRoomAction(roomCode, () => {
             return roomManager.spectateRoom(session, roomCode, parsed.data.nickname);
           });
 
@@ -372,7 +383,7 @@ export function createAppServer(options: ServerOptions = {}) {
         const wasSpectator = Boolean(session.isSpectator);
 
         try {
-          const { leftCode, snapshot } = await roomManager.enqueueRoomAction(targetCode, () => {
+          const { result: { leftCode, snapshot } } = await roomManager.enqueueRoomAction(targetCode, () => {
             return roomManager.leaveRoom(session, targetCode);
           });
 
@@ -419,11 +430,16 @@ export function createAppServer(options: ServerOptions = {}) {
         }
 
         const roomCode = parsed.data.roomCode.trim().toUpperCase();
+        const actionStart = performance.now();
 
         try {
-          const updatedSnapshot = await roomManager.enqueueRoomAction(roomCode, () => {
-            return roomManager.updateSettings(session, roomCode, parsed.data.settings);
-          });
+          const { result: updatedSnapshot, isDuplicate } = await roomManager.enqueueRoomAction(
+            roomCode,
+            () => roomManager.updateSettings(session, roomCode, parsed.data.settings),
+            parsed.data.requestId
+          );
+
+          serverMetrics.recordAction(performance.now() - actionStart, true, isDuplicate);
 
           if (typeof ack === 'function') {
             ack({ ok: true, data: updatedSnapshot });
@@ -431,6 +447,7 @@ export function createAppServer(options: ServerOptions = {}) {
 
           io.to(`room:${updatedSnapshot.code}`).emit(SOCKET_EVENTS.ROOM_UPDATED, updatedSnapshot);
         } catch (error: unknown) {
+          serverMetrics.recordAction(performance.now() - actionStart, false, false, true);
           const msg = error instanceof Error ? error.message : 'Failed to update settings';
           const code = (msg.includes('host') || msg.includes('Spectator') || msg.includes('not permitted')) ? 'FORBIDDEN' : 'SETTINGS_UPDATE_FAILED';
           const err: SocketError = { code, message: msg };
@@ -480,11 +497,16 @@ export function createAppServer(options: ServerOptions = {}) {
         }
 
         const roomCode = parsed.data.roomCode.trim().toUpperCase();
+        const actionStart = performance.now();
 
         try {
-          const snapshot = await roomManager.enqueueRoomAction(roomCode, () => {
-            return roomManager.startGame(session, roomCode);
-          });
+          const { result: snapshot, isDuplicate } = await roomManager.enqueueRoomAction(
+            roomCode,
+            () => roomManager.startGame(session, roomCode),
+            parsed.data.requestId
+          );
+
+          serverMetrics.recordAction(performance.now() - actionStart, true, isDuplicate);
 
           if (typeof ack === 'function') {
             ack({ ok: true, data: snapshot });
@@ -499,6 +521,7 @@ export function createAppServer(options: ServerOptions = {}) {
             });
           }
         } catch (error: unknown) {
+          serverMetrics.recordAction(performance.now() - actionStart, false, false, true);
           const msg = error instanceof Error ? error.message : 'Failed to start game';
           let code = 'GAME_START_FAILED';
           if (msg.includes('host') || msg.includes('Spectator') || msg.includes('not permitted')) code = 'FORBIDDEN';
@@ -526,11 +549,16 @@ export function createAppServer(options: ServerOptions = {}) {
         }
 
         const roomCode = parsed.data.roomCode.trim().toUpperCase();
+        const actionStart = performance.now();
 
         try {
-          const snapshot = await roomManager.enqueueRoomAction(roomCode, () => {
-            return roomManager.rematchRoom(session, roomCode);
-          });
+          const { result: snapshot, isDuplicate } = await roomManager.enqueueRoomAction(
+            roomCode,
+            () => roomManager.rematchRoom(session, roomCode),
+            parsed.data.requestId
+          );
+
+          serverMetrics.recordAction(performance.now() - actionStart, true, isDuplicate);
 
           if (typeof ack === 'function') {
             ack({ ok: true, data: snapshot });
@@ -538,6 +566,7 @@ export function createAppServer(options: ServerOptions = {}) {
 
           io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.ROOM_UPDATED, snapshot);
         } catch (error: unknown) {
+          serverMetrics.recordAction(performance.now() - actionStart, false, false, true);
           const msg = error instanceof Error ? error.message : 'Failed to initiate rematch';
           let code = 'REMATCH_FAILED';
           if (msg.includes('host') || msg.includes('Spectator') || msg.includes('not permitted')) code = 'FORBIDDEN';
@@ -563,11 +592,16 @@ export function createAppServer(options: ServerOptions = {}) {
         }
 
         const roomCode = parsed.data.roomCode.trim().toUpperCase();
+        const actionStart = performance.now();
 
         try {
-          const snapshot = await roomManager.enqueueRoomAction(roomCode, () => {
-            return roomManager.rollDice(session, roomCode);
-          });
+          const { result: snapshot, isDuplicate } = await roomManager.enqueueRoomAction(
+            roomCode,
+            () => roomManager.rollDice(session, roomCode),
+            parsed.data.requestId
+          );
+
+          serverMetrics.recordAction(performance.now() - actionStart, true, isDuplicate);
 
           if (typeof ack === 'function') {
             ack({ ok: true, data: snapshot });
@@ -582,6 +616,7 @@ export function createAppServer(options: ServerOptions = {}) {
             });
           }
         } catch (error: unknown) {
+          serverMetrics.recordAction(performance.now() - actionStart, false, false, true);
           const msg = error instanceof Error ? error.message : 'Failed to roll dice';
           let code = 'ROLL_DICE_FAILED';
           if (msg.includes('Spectator') || msg.includes('not permitted')) code = 'FORBIDDEN';
@@ -610,11 +645,16 @@ export function createAppServer(options: ServerOptions = {}) {
         }
 
         const roomCode = parsed.data.roomCode.trim().toUpperCase();
+        const actionStart = performance.now();
 
         try {
-          const snapshot = await roomManager.enqueueRoomAction(roomCode, () => {
-            return roomManager.buyProperty(session, roomCode);
-          });
+          const { result: snapshot, isDuplicate } = await roomManager.enqueueRoomAction(
+            roomCode,
+            () => roomManager.buyProperty(session, roomCode),
+            parsed.data.requestId
+          );
+
+          serverMetrics.recordAction(performance.now() - actionStart, true, isDuplicate);
 
           if (typeof ack === 'function') {
             ack({ ok: true, data: snapshot });
@@ -629,6 +669,7 @@ export function createAppServer(options: ServerOptions = {}) {
             });
           }
         } catch (error: unknown) {
+          serverMetrics.recordAction(performance.now() - actionStart, false, false, true);
           const msg = error instanceof Error ? error.message : 'Failed to purchase property';
           let code = 'BUY_PROPERTY_FAILED';
           if (msg.includes('Spectator') || msg.includes('not permitted')) code = 'FORBIDDEN';
@@ -658,11 +699,16 @@ export function createAppServer(options: ServerOptions = {}) {
         }
 
         const roomCode = parsed.data.roomCode.trim().toUpperCase();
+        const actionStart = performance.now();
 
         try {
-          const snapshot = await roomManager.enqueueRoomAction(roomCode, () => {
-            return roomManager.declineProperty(session, roomCode);
-          });
+          const { result: snapshot, isDuplicate } = await roomManager.enqueueRoomAction(
+            roomCode,
+            () => roomManager.declineProperty(session, roomCode),
+            parsed.data.requestId
+          );
+
+          serverMetrics.recordAction(performance.now() - actionStart, true, isDuplicate);
 
           if (typeof ack === 'function') ack({ ok: true, data: snapshot });
           io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.ROOM_UPDATED, snapshot);
@@ -674,6 +720,7 @@ export function createAppServer(options: ServerOptions = {}) {
             });
           }
         } catch (error: unknown) {
+          serverMetrics.recordAction(performance.now() - actionStart, false, false, true);
           const msg = error instanceof Error ? error.message : 'Failed to decline property';
           const code = (msg.includes('Spectator') || msg.includes('not permitted')) ? 'FORBIDDEN' : 'DECLINE_PROPERTY_FAILED';
           const err: SocketError = { code, message: msg };
@@ -698,11 +745,16 @@ export function createAppServer(options: ServerOptions = {}) {
         }
 
         const roomCode = parsed.data.roomCode.trim().toUpperCase();
+        const actionStart = performance.now();
 
         try {
-          const snapshot = await roomManager.enqueueRoomAction(roomCode, () => {
-            return roomManager.auctionBid(session, roomCode, parsed.data.bidAmount);
-          });
+          const { result: snapshot, isDuplicate } = await roomManager.enqueueRoomAction(
+            roomCode,
+            () => roomManager.auctionBid(session, roomCode, parsed.data.bidAmount),
+            parsed.data.requestId
+          );
+
+          serverMetrics.recordAction(performance.now() - actionStart, true, isDuplicate);
 
           if (typeof ack === 'function') ack({ ok: true, data: snapshot });
           io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.ROOM_UPDATED, snapshot);
@@ -714,6 +766,7 @@ export function createAppServer(options: ServerOptions = {}) {
             });
           }
         } catch (error: unknown) {
+          serverMetrics.recordAction(performance.now() - actionStart, false, false, true);
           const msg = error instanceof Error ? error.message : 'Failed to place auction bid';
           const code = (msg.includes('Spectator') || msg.includes('not permitted')) ? 'FORBIDDEN' : 'AUCTION_BID_FAILED';
           const err: SocketError = { code, message: msg };
@@ -738,11 +791,16 @@ export function createAppServer(options: ServerOptions = {}) {
         }
 
         const roomCode = parsed.data.roomCode.trim().toUpperCase();
+        const actionStart = performance.now();
 
         try {
-          const snapshot = await roomManager.enqueueRoomAction(roomCode, () => {
-            return roomManager.auctionPass(session, roomCode);
-          });
+          const { result: snapshot, isDuplicate } = await roomManager.enqueueRoomAction(
+            roomCode,
+            () => roomManager.auctionPass(session, roomCode),
+            parsed.data.requestId
+          );
+
+          serverMetrics.recordAction(performance.now() - actionStart, true, isDuplicate);
 
           if (typeof ack === 'function') ack({ ok: true, data: snapshot });
           io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.ROOM_UPDATED, snapshot);
@@ -754,6 +812,7 @@ export function createAppServer(options: ServerOptions = {}) {
             });
           }
         } catch (error: unknown) {
+          serverMetrics.recordAction(performance.now() - actionStart, false, false, true);
           const msg = error instanceof Error ? error.message : 'Failed to pass auction';
           const code = (msg.includes('Spectator') || msg.includes('not permitted')) ? 'FORBIDDEN' : 'AUCTION_PASS_FAILED';
           const err: SocketError = { code, message: msg };
@@ -778,11 +837,16 @@ export function createAppServer(options: ServerOptions = {}) {
         }
 
         const roomCode = parsed.data.roomCode.trim().toUpperCase();
+        const actionStart = performance.now();
 
         try {
-          const snapshot = await roomManager.enqueueRoomAction(roomCode, () => {
-            return roomManager.payPrisonFine(session, roomCode);
-          });
+          const { result: snapshot, isDuplicate } = await roomManager.enqueueRoomAction(
+            roomCode,
+            () => roomManager.payPrisonFine(session, roomCode),
+            parsed.data.requestId
+          );
+
+          serverMetrics.recordAction(performance.now() - actionStart, true, isDuplicate);
 
           if (typeof ack === 'function') ack({ ok: true, data: snapshot });
           io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.ROOM_UPDATED, snapshot);
@@ -794,6 +858,7 @@ export function createAppServer(options: ServerOptions = {}) {
             });
           }
         } catch (error: unknown) {
+          serverMetrics.recordAction(performance.now() - actionStart, false, false, true);
           const msg = error instanceof Error ? error.message : 'Failed to pay prison fine';
           const code = (msg.includes('Spectator') || msg.includes('not permitted')) ? 'FORBIDDEN' : 'PAY_PRISON_FINE_FAILED';
           const err: SocketError = { code, message: msg };
@@ -818,11 +883,16 @@ export function createAppServer(options: ServerOptions = {}) {
         }
 
         const roomCode = parsed.data.roomCode.trim().toUpperCase();
+        const actionStart = performance.now();
 
         try {
-          const snapshot = await roomManager.enqueueRoomAction(roomCode, () => {
-            return roomManager.mortgageProperty(session, roomCode, parsed.data.spaceId);
-          });
+          const { result: snapshot, isDuplicate } = await roomManager.enqueueRoomAction(
+            roomCode,
+            () => roomManager.mortgageProperty(session, roomCode, parsed.data.spaceId),
+            parsed.data.requestId
+          );
+
+          serverMetrics.recordAction(performance.now() - actionStart, true, isDuplicate);
 
           if (typeof ack === 'function') ack({ ok: true, data: snapshot });
           io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.ROOM_UPDATED, snapshot);
@@ -834,6 +904,7 @@ export function createAppServer(options: ServerOptions = {}) {
             });
           }
         } catch (error: unknown) {
+          serverMetrics.recordAction(performance.now() - actionStart, false, false, true);
           const msg = error instanceof Error ? error.message : 'Failed to mortgage property';
           const code = (msg.includes('Spectator') || msg.includes('not permitted')) ? 'FORBIDDEN' : 'MORTGAGE_PROPERTY_FAILED';
           const err: SocketError = { code, message: msg };
@@ -858,11 +929,16 @@ export function createAppServer(options: ServerOptions = {}) {
         }
 
         const roomCode = parsed.data.roomCode.trim().toUpperCase();
+        const actionStart = performance.now();
 
         try {
-          const snapshot = await roomManager.enqueueRoomAction(roomCode, () => {
-            return roomManager.unmortgageProperty(session, roomCode, parsed.data.spaceId);
-          });
+          const { result: snapshot, isDuplicate } = await roomManager.enqueueRoomAction(
+            roomCode,
+            () => roomManager.unmortgageProperty(session, roomCode, parsed.data.spaceId),
+            parsed.data.requestId
+          );
+
+          serverMetrics.recordAction(performance.now() - actionStart, true, isDuplicate);
 
           if (typeof ack === 'function') ack({ ok: true, data: snapshot });
           io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.ROOM_UPDATED, snapshot);
@@ -874,6 +950,7 @@ export function createAppServer(options: ServerOptions = {}) {
             });
           }
         } catch (error: unknown) {
+          serverMetrics.recordAction(performance.now() - actionStart, false, false, true);
           const msg = error instanceof Error ? error.message : 'Failed to unmortgage property';
           const code = (msg.includes('Spectator') || msg.includes('not permitted')) ? 'FORBIDDEN' : 'UNMORTGAGE_PROPERTY_FAILED';
           const err: SocketError = { code, message: msg };
@@ -898,11 +975,16 @@ export function createAppServer(options: ServerOptions = {}) {
         }
 
         const roomCode = parsed.data.roomCode.trim().toUpperCase();
+        const actionStart = performance.now();
 
         try {
-          const snapshot = await roomManager.enqueueRoomAction(roomCode, () => {
-            return roomManager.buildHouse(session, roomCode, parsed.data.spaceId);
-          });
+          const { result: snapshot, isDuplicate } = await roomManager.enqueueRoomAction(
+            roomCode,
+            () => roomManager.buildHouse(session, roomCode, parsed.data.spaceId),
+            parsed.data.requestId
+          );
+
+          serverMetrics.recordAction(performance.now() - actionStart, true, isDuplicate);
 
           if (typeof ack === 'function') ack({ ok: true, data: snapshot });
           io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.ROOM_UPDATED, snapshot);
@@ -914,6 +996,7 @@ export function createAppServer(options: ServerOptions = {}) {
             });
           }
         } catch (error: unknown) {
+          serverMetrics.recordAction(performance.now() - actionStart, false, false, true);
           const msg = error instanceof Error ? error.message : 'Failed to build house';
           const code = (msg.includes('Spectator') || msg.includes('not permitted')) ? 'FORBIDDEN' : 'BUILD_HOUSE_FAILED';
           const err: SocketError = { code, message: msg };
@@ -938,11 +1021,16 @@ export function createAppServer(options: ServerOptions = {}) {
         }
 
         const roomCode = parsed.data.roomCode.trim().toUpperCase();
+        const actionStart = performance.now();
 
         try {
-          const snapshot = await roomManager.enqueueRoomAction(roomCode, () => {
-            return roomManager.sellHouse(session, roomCode, parsed.data.spaceId);
-          });
+          const { result: snapshot, isDuplicate } = await roomManager.enqueueRoomAction(
+            roomCode,
+            () => roomManager.sellHouse(session, roomCode, parsed.data.spaceId),
+            parsed.data.requestId
+          );
+
+          serverMetrics.recordAction(performance.now() - actionStart, true, isDuplicate);
 
           if (typeof ack === 'function') ack({ ok: true, data: snapshot });
           io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.ROOM_UPDATED, snapshot);
@@ -954,6 +1042,7 @@ export function createAppServer(options: ServerOptions = {}) {
             });
           }
         } catch (error: unknown) {
+          serverMetrics.recordAction(performance.now() - actionStart, false, false, true);
           const msg = error instanceof Error ? error.message : 'Failed to sell house';
           const code = (msg.includes('Spectator') || msg.includes('not permitted')) ? 'FORBIDDEN' : 'SELL_HOUSE_FAILED';
           const err: SocketError = { code, message: msg };
@@ -978,17 +1067,22 @@ export function createAppServer(options: ServerOptions = {}) {
         }
 
         const roomCode = parsed.data.roomCode.trim().toUpperCase();
+        const actionStart = performance.now();
 
         try {
-          const snapshot = await roomManager.enqueueRoomAction(roomCode, () => {
-            return roomManager.createTrade(session, roomCode, {
+          const { result: snapshot, isDuplicate } = await roomManager.enqueueRoomAction(
+            roomCode,
+            () => roomManager.createTrade(session, roomCode, {
               receiverId: parsed.data.receiverId,
               offeredCash: parsed.data.offeredCash,
               offeredPropertyIds: parsed.data.offeredPropertyIds,
               requestedCash: parsed.data.requestedCash,
               requestedPropertyIds: parsed.data.requestedPropertyIds,
-            });
-          });
+            }),
+            parsed.data.requestId
+          );
+
+          serverMetrics.recordAction(performance.now() - actionStart, true, isDuplicate);
 
           if (typeof ack === 'function') ack({ ok: true, data: snapshot });
           io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.ROOM_UPDATED, snapshot);
@@ -1000,6 +1094,7 @@ export function createAppServer(options: ServerOptions = {}) {
             });
           }
         } catch (error: unknown) {
+          serverMetrics.recordAction(performance.now() - actionStart, false, false, true);
           const msg = error instanceof Error ? error.message : 'Failed to create trade offer';
           const code = (msg.includes('Spectator') || msg.includes('not permitted')) ? 'FORBIDDEN' : 'TRADE_CREATE_FAILED';
           const err: SocketError = { code, message: msg };
@@ -1024,11 +1119,16 @@ export function createAppServer(options: ServerOptions = {}) {
         }
 
         const roomCode = parsed.data.roomCode.trim().toUpperCase();
+        const actionStart = performance.now();
 
         try {
-          const snapshot = await roomManager.enqueueRoomAction(roomCode, () => {
-            return roomManager.acceptTrade(session, roomCode);
-          });
+          const { result: snapshot, isDuplicate } = await roomManager.enqueueRoomAction(
+            roomCode,
+            () => roomManager.acceptTrade(session, roomCode),
+            parsed.data.requestId
+          );
+
+          serverMetrics.recordAction(performance.now() - actionStart, true, isDuplicate);
 
           if (typeof ack === 'function') ack({ ok: true, data: snapshot });
           io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.ROOM_UPDATED, snapshot);
@@ -1040,6 +1140,7 @@ export function createAppServer(options: ServerOptions = {}) {
             });
           }
         } catch (error: unknown) {
+          serverMetrics.recordAction(performance.now() - actionStart, false, false, true);
           const msg = error instanceof Error ? error.message : 'Failed to accept trade offer';
           const code = (msg.includes('Spectator') || msg.includes('not permitted')) ? 'FORBIDDEN' : 'TRADE_ACCEPT_FAILED';
           const err: SocketError = { code, message: msg };
@@ -1064,11 +1165,16 @@ export function createAppServer(options: ServerOptions = {}) {
         }
 
         const roomCode = parsed.data.roomCode.trim().toUpperCase();
+        const actionStart = performance.now();
 
         try {
-          const snapshot = await roomManager.enqueueRoomAction(roomCode, () => {
-            return roomManager.rejectTrade(session, roomCode);
-          });
+          const { result: snapshot, isDuplicate } = await roomManager.enqueueRoomAction(
+            roomCode,
+            () => roomManager.rejectTrade(session, roomCode),
+            parsed.data.requestId
+          );
+
+          serverMetrics.recordAction(performance.now() - actionStart, true, isDuplicate);
 
           if (typeof ack === 'function') ack({ ok: true, data: snapshot });
           io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.ROOM_UPDATED, snapshot);
@@ -1080,6 +1186,7 @@ export function createAppServer(options: ServerOptions = {}) {
             });
           }
         } catch (error: unknown) {
+          serverMetrics.recordAction(performance.now() - actionStart, false, false, true);
           const msg = error instanceof Error ? error.message : 'Failed to reject trade offer';
           const code = (msg.includes('Spectator') || msg.includes('not permitted')) ? 'FORBIDDEN' : 'TRADE_REJECT_FAILED';
           const err: SocketError = { code, message: msg };
@@ -1104,11 +1211,16 @@ export function createAppServer(options: ServerOptions = {}) {
         }
 
         const roomCode = parsed.data.roomCode.trim().toUpperCase();
+        const actionStart = performance.now();
 
         try {
-          const snapshot = await roomManager.enqueueRoomAction(roomCode, () => {
-            return roomManager.declareBankruptcy(session, roomCode, parsed.data.creditorId);
-          });
+          const { result: snapshot, isDuplicate } = await roomManager.enqueueRoomAction(
+            roomCode,
+            () => roomManager.declareBankruptcy(session, roomCode, parsed.data.creditorId),
+            parsed.data.requestId
+          );
+
+          serverMetrics.recordAction(performance.now() - actionStart, true, isDuplicate);
 
           if (typeof ack === 'function') ack({ ok: true, data: snapshot });
           io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.ROOM_UPDATED, snapshot);
@@ -1120,6 +1232,7 @@ export function createAppServer(options: ServerOptions = {}) {
             });
           }
         } catch (error: unknown) {
+          serverMetrics.recordAction(performance.now() - actionStart, false, false, true);
           const msg = error instanceof Error ? error.message : 'Failed to declare bankruptcy';
           const code = (msg.includes('Spectator') || msg.includes('not permitted')) ? 'FORBIDDEN' : 'DECLARE_BANKRUPTCY_FAILED';
           const err: SocketError = { code, message: msg };
@@ -1144,11 +1257,16 @@ export function createAppServer(options: ServerOptions = {}) {
         }
 
         const roomCode = parsed.data.roomCode.trim().toUpperCase();
+        const actionStart = performance.now();
 
         try {
-          const snapshot = await roomManager.enqueueRoomAction(roomCode, () => {
-            return roomManager.endTurn(session, roomCode);
-          });
+          const { result: snapshot, isDuplicate } = await roomManager.enqueueRoomAction(
+            roomCode,
+            () => roomManager.endTurn(session, roomCode),
+            parsed.data.requestId
+          );
+
+          serverMetrics.recordAction(performance.now() - actionStart, true, isDuplicate);
 
           if (typeof ack === 'function') {
             ack({ ok: true, data: snapshot });
@@ -1163,6 +1281,7 @@ export function createAppServer(options: ServerOptions = {}) {
             });
           }
         } catch (error: unknown) {
+          serverMetrics.recordAction(performance.now() - actionStart, false, false, true);
           const msg = error instanceof Error ? error.message : 'Failed to end turn';
           let code = 'END_TURN_FAILED';
           if (msg.includes('Spectator') || msg.includes('not permitted')) code = 'FORBIDDEN';

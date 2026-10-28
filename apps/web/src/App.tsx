@@ -19,6 +19,9 @@ export default function App() {
   const [roomSnapshot, setRoomSnapshot] = useState<RoomSnapshot | null>(null);
   const [currentSessionId, setCurrentSessionId] = useState<string>('');
   const [serverError, setServerError] = useState<string>('');
+  const [connectionStatus, setConnectionStatus] = useState<
+    'connected' | 'connecting' | 'reconnecting' | 'disconnected'
+  >('connecting');
   const [socket, setSocket] = useState<Socket | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
 
@@ -36,11 +39,33 @@ export default function App() {
     const s = io(backendUrl, {
       auth: { token: storedToken },
       transports: ['websocket', 'polling'],
+      reconnection: true,
       reconnectionAttempts: 10,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      randomizationFactor: 0.5,
     });
 
     s.on('connect', () => {
+      setConnectionStatus('connected');
       setServerError('');
+    });
+
+    s.on('disconnect', () => {
+      setConnectionStatus('disconnected');
+    });
+
+    s.io.on('reconnect_attempt', () => {
+      setConnectionStatus('reconnecting');
+    });
+
+    s.io.on('reconnect', () => {
+      setConnectionStatus('connected');
+    });
+
+    s.io.on('reconnect_failed', () => {
+      setConnectionStatus('disconnected');
+      setServerError('Unable to reconnect to server. Please refresh or verify your connection.');
     });
 
     // 1. Authenticated guest identity from server
@@ -51,6 +76,9 @@ export default function App() {
 
     // 2. Authoritative room snapshot
     s.on(SOCKET_EVENTS.ROOM_SNAPSHOT, (snapshot: RoomSnapshot) => {
+      if (snapshot.sequenceNumber < lastSequenceRef.current) {
+        return; // Stale snapshot ignored
+      }
       lastSequenceRef.current = snapshot.sequenceNumber;
       setRoomSnapshot(snapshot);
       setScreen('room');
@@ -58,6 +86,10 @@ export default function App() {
 
     // 3. Room updated with sequence tracking
     s.on(SOCKET_EVENTS.ROOM_UPDATED, (snapshot: RoomSnapshot) => {
+      if (snapshot.sequenceNumber < lastSequenceRef.current) {
+        return; // Ignore stale delayed update
+      }
+
       // Check for sequence number gap
       if (
         lastSequenceRef.current > 0 &&
@@ -68,7 +100,7 @@ export default function App() {
           SOCKET_EVENTS.ROOM_GET_SNAPSHOT,
           { roomCode: snapshot.code },
           (res: SocketAck<RoomSnapshot>) => {
-            if (res.ok) {
+            if (res.ok && res.data.sequenceNumber >= lastSequenceRef.current) {
               lastSequenceRef.current = res.data.sequenceNumber;
               setRoomSnapshot(res.data);
             }
@@ -279,6 +311,19 @@ export default function App() {
 
   return (
     <>
+      {connectionStatus !== 'connected' && (
+        <div className="network-status-banner" role="status" aria-live="polite">
+          {connectionStatus === 'reconnecting' && (
+            <span>⚠️ Network interrupted — reconnecting to match...</span>
+          )}
+          {connectionStatus === 'disconnected' && (
+            <span>❌ Disconnected from server. Waiting to reconnect...</span>
+          )}
+          {connectionStatus === 'connecting' && screen === 'room' && (
+            <span>🔄 Synchronizing with table...</span>
+          )}
+        </div>
+      )}
       {screen === 'landing' || !roomSnapshot ? (
         <LandingPage
           nickname={nickname}

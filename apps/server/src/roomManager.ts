@@ -26,6 +26,13 @@ import {
   type GameState as EngineGameState,
   type RandomSource,
 } from '@charchokkha/game-engine';
+import { RoomPersistenceManager } from './roomPersistence.js';
+
+export interface ProcessedActionRecord {
+  requestId: string;
+  snapshot: RoomSnapshot;
+  timestamp: number;
+}
 
 export interface GuestSession {
   sessionId: string;
@@ -63,12 +70,29 @@ export interface ServerRoom {
   createdAt: number;
   actionQueue: Promise<void>;
   gameState?: EngineGameState;
+  processedActions: Map<string, ProcessedActionRecord>;
 }
 
 export class RoomManager {
   private sessionsByToken = new Map<string, GuestSession>();
   private socketToSession = new Map<string, GuestSession>();
   private rooms = new Map<string, ServerRoom>();
+  private persistence: RoomPersistenceManager;
+
+  constructor(persistenceDir?: string) {
+    this.persistence = new RoomPersistenceManager(persistenceDir);
+    this.restorePersistedData();
+  }
+
+  private restorePersistedData(): void {
+    const { rooms, sessions } = this.persistence.restoreRooms();
+    for (const session of sessions) {
+      this.sessionsByToken.set(session.token, session);
+    }
+    for (const room of rooms) {
+      this.rooms.set(room.code, room);
+    }
+  }
 
   /**
    * Retrieves or creates a secure guest session using crypto tokens.
@@ -114,19 +138,27 @@ export class RoomManager {
   }
 
   /**
-   * Per-room synchronized action queue (ARCHITECTURE.md Section 6).
+   * Per-room synchronized action queue with idempotency caching & persistence (ARCHITECTURE.md Section 6).
    */
   public async enqueueRoomAction<T>(
     roomCode: string,
-    action: (room: ServerRoom) => T | Promise<T>
-  ): Promise<T> {
+    action: (room: ServerRoom) => T | Promise<T>,
+    requestId?: string
+  ): Promise<{ result: T; isDuplicate: boolean }> {
     const normalizedCode = roomCode.trim().toUpperCase();
     const room = this.rooms.get(normalizedCode);
     if (!room) {
       throw new Error(`Room not found: ${normalizedCode}`);
     }
 
+    // 1. Check idempotency cache first before queue wait
+    if (requestId && room.processedActions.has(requestId)) {
+      const cached = room.processedActions.get(requestId)!;
+      return { result: cached.snapshot as unknown as T, isDuplicate: true };
+    }
+
     let result!: T;
+    let duplicateDetected = false;
     const previousQueue = room.actionQueue;
 
     const nextQueue = (async () => {
@@ -135,12 +167,40 @@ export class RoomManager {
       } catch {
         // Ignore previous errors in queue
       }
+
+      // Check again inside queue in case concurrent duplicate arrived
+      if (requestId && room.processedActions.has(requestId)) {
+        const cached = room.processedActions.get(requestId)!;
+        result = cached.snapshot as unknown as T;
+        duplicateDetected = true;
+        return;
+      }
+
       result = await action(room);
+
+      // Cache snapshot for idempotency
+      if (requestId && result && typeof result === 'object' && 'sequenceNumber' in result) {
+        room.processedActions.set(requestId, {
+          requestId,
+          snapshot: result as unknown as RoomSnapshot,
+          timestamp: Date.now(),
+        });
+
+        // Bound to 100 entries per room
+        if (room.processedActions.size > 100) {
+          const firstKey = room.processedActions.keys().next().value;
+          if (firstKey) room.processedActions.delete(firstKey);
+        }
+      }
+
+      // Persist committed state
+      this.persistence.saveRoom(room, this.sessionsByToken);
     })();
 
     room.actionQueue = nextQueue;
     await nextQueue;
-    return result;
+
+    return { result, isDuplicate: duplicateDetected };
   }
 
   /**
@@ -210,12 +270,14 @@ export class RoomManager {
       spectators: new Map(),
       createdAt: Date.now(),
       actionQueue: Promise.resolve(),
+      processedActions: new Map(),
     };
 
     this.rooms.set(code, room);
     session.currentRoomCode = code;
     session.isSpectator = false;
 
+    this.persistence.saveRoom(room, this.sessionsByToken);
     return this.toSnapshot(room);
   }
 
@@ -426,9 +488,11 @@ export class RoomManager {
     // If room is empty of players, mark abandoned
     if (room.players.size === 0) {
       room.state = 'abandoned';
+      this.persistence.deleteRoom(code);
       return { leftCode: code, abandoned: true };
     }
 
+    this.persistence.saveRoom(room, this.sessionsByToken);
     return {
       leftCode: code,
       snapshot: this.toSnapshot(room),
@@ -454,6 +518,9 @@ export class RoomManager {
     this.ensureSeatedPlayer(room, session);
     if (room.hostSessionId !== session.sessionId) {
       throw new Error('Only the room host can modify game settings');
+    }
+    if (room.state !== 'waiting') {
+      throw new Error(`Cannot modify settings in status ${room.state}`);
     }
 
     if (partial.maxPlayers !== undefined) {

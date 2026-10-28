@@ -103,6 +103,7 @@ export const HealthCheckResponseSchema = z.object({
   service: z.string(),
   uptime: z.number().nonnegative(),
   timestamp: z.string(),
+  metrics: z.record(z.string(), z.any()).optional(),
 });
 
 export type HealthCheckResponse = z.infer<typeof HealthCheckResponseSchema>;
@@ -330,6 +331,7 @@ export type LeaveRoomPayload = z.infer<typeof LeaveRoomPayloadSchema>;
 export const UpdateSettingsPayloadSchema = z.object({
   roomCode: z.string().trim().min(3).max(10),
   settings: RoomSettingsSchema.partial(),
+  requestId: z.string().trim().min(1).max(64).optional(),
 });
 
 export type UpdateSettingsPayload = z.infer<typeof UpdateSettingsPayloadSchema>;
@@ -344,30 +346,35 @@ export type GetSnapshotPayload = z.infer<typeof GetSnapshotPayloadSchema>;
 // Action Payloads: Game
 export const RematchPayloadSchema = z.object({
   roomCode: z.string().trim().min(3).max(10),
+  requestId: z.string().trim().min(1).max(64).optional(),
 });
 
 export type RematchPayload = z.infer<typeof RematchPayloadSchema>;
 
 export const StartGamePayloadSchema = z.object({
   roomCode: z.string().trim().min(3).max(10),
+  requestId: z.string().trim().min(1).max(64).optional(),
 });
 
 export type StartGamePayload = z.infer<typeof StartGamePayloadSchema>;
 
 export const RollDicePayloadSchema = z.object({
   roomCode: z.string().trim().min(3).max(10),
+  requestId: z.string().trim().min(1).max(64).optional(),
 });
 
 export type RollDicePayload = z.infer<typeof RollDicePayloadSchema>;
 
 export const BuyPropertyPayloadSchema = z.object({
   roomCode: z.string().trim().min(3).max(10),
+  requestId: z.string().trim().min(1).max(64).optional(),
 });
 
 export type BuyPropertyPayload = z.infer<typeof BuyPropertyPayloadSchema>;
 
 export const DeclinePropertyPayloadSchema = z.object({
   roomCode: z.string().trim().min(3).max(10),
+  requestId: z.string().trim().min(1).max(64).optional(),
 });
 
 export type DeclinePropertyPayload = z.infer<typeof DeclinePropertyPayloadSchema>;
@@ -375,18 +382,21 @@ export type DeclinePropertyPayload = z.infer<typeof DeclinePropertyPayloadSchema
 export const AuctionBidPayloadSchema = z.object({
   roomCode: z.string().trim().min(3).max(10),
   bidAmount: z.number().int().positive('Bid amount must be a positive integer'),
+  requestId: z.string().trim().min(1).max(64).optional(),
 });
 
 export type AuctionBidPayload = z.infer<typeof AuctionBidPayloadSchema>;
 
 export const AuctionPassPayloadSchema = z.object({
   roomCode: z.string().trim().min(3).max(10),
+  requestId: z.string().trim().min(1).max(64).optional(),
 });
 
 export type AuctionPassPayload = z.infer<typeof AuctionPassPayloadSchema>;
 
 export const PayPrisonFinePayloadSchema = z.object({
   roomCode: z.string().trim().min(3).max(10),
+  requestId: z.string().trim().min(1).max(64).optional(),
 });
 
 export type PayPrisonFinePayload = z.infer<typeof PayPrisonFinePayloadSchema>;
@@ -394,6 +404,7 @@ export type PayPrisonFinePayload = z.infer<typeof PayPrisonFinePayloadSchema>;
 export const MortgagePropertyPayloadSchema = z.object({
   roomCode: z.string().trim().min(3).max(10),
   spaceId: z.number().int().min(0).max(39),
+  requestId: z.string().trim().min(1).max(64).optional(),
 });
 
 export type MortgagePropertyPayload = z.infer<typeof MortgagePropertyPayloadSchema>;
@@ -401,6 +412,7 @@ export type MortgagePropertyPayload = z.infer<typeof MortgagePropertyPayloadSche
 export const UnmortgagePropertyPayloadSchema = z.object({
   roomCode: z.string().trim().min(3).max(10),
   spaceId: z.number().int().min(0).max(39),
+  requestId: z.string().trim().min(1).max(64).optional(),
 });
 
 export type UnmortgagePropertyPayload = z.infer<typeof UnmortgagePropertyPayloadSchema>;
@@ -408,6 +420,7 @@ export type UnmortgagePropertyPayload = z.infer<typeof UnmortgagePropertyPayload
 export const BuildHousePayloadSchema = z.object({
   roomCode: z.string().trim().min(3).max(10),
   spaceId: z.number().int().min(0).max(39),
+  requestId: z.string().trim().min(1).max(64).optional(),
 });
 
 export type BuildHousePayload = z.infer<typeof BuildHousePayloadSchema>;
@@ -415,6 +428,7 @@ export type BuildHousePayload = z.infer<typeof BuildHousePayloadSchema>;
 export const SellHousePayloadSchema = z.object({
   roomCode: z.string().trim().min(3).max(10),
   spaceId: z.number().int().min(0).max(39),
+  requestId: z.string().trim().min(1).max(64).optional(),
 });
 
 export type SellHousePayload = z.infer<typeof SellHousePayloadSchema>;
@@ -426,18 +440,21 @@ export const TradeCreatePayloadSchema = z.object({
   offeredPropertyIds: z.array(z.number().int().min(0).max(39)).default([]),
   requestedCash: z.number().int().nonnegative().default(0),
   requestedPropertyIds: z.array(z.number().int().min(0).max(39)).default([]),
+  requestId: z.string().trim().min(1).max(64).optional(),
 });
 
 export type TradeCreatePayload = z.infer<typeof TradeCreatePayloadSchema>;
 
 export const TradeAcceptPayloadSchema = z.object({
   roomCode: z.string().trim().min(3).max(10),
+  requestId: z.string().trim().min(1).max(64).optional(),
 });
 
 export type TradeAcceptPayload = z.infer<typeof TradeAcceptPayloadSchema>;
 
 export const TradeRejectPayloadSchema = z.object({
   roomCode: z.string().trim().min(3).max(10),
+  requestId: z.string().trim().min(1).max(64).optional(),
 });
 
 export type TradeRejectPayload = z.infer<typeof TradeRejectPayloadSchema>;
@@ -445,12 +462,14 @@ export type TradeRejectPayload = z.infer<typeof TradeRejectPayloadSchema>;
 export const DeclareBankruptcyPayloadSchema = z.object({
   roomCode: z.string().trim().min(3).max(10),
   creditorId: z.string().optional(),
+  requestId: z.string().trim().min(1).max(64).optional(),
 });
 
 export type DeclareBankruptcyPayload = z.infer<typeof DeclareBankruptcyPayloadSchema>;
 
 export const EndTurnPayloadSchema = z.object({
   roomCode: z.string().trim().min(3).max(10),
+  requestId: z.string().trim().min(1).max(64).optional(),
 });
 
 export type EndTurnPayload = z.infer<typeof EndTurnPayloadSchema>;

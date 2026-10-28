@@ -39,6 +39,7 @@ export interface BoardProps {
   onDeclareBankruptcy: () => void;
   onEndTurn: () => void;
   isRolling: boolean;
+  isSubmittingAction?: boolean;
   onShowResults?: () => void;
 }
 
@@ -65,6 +66,7 @@ export function Board({
   onDeclareBankruptcy,
   onEndTurn,
   isRolling,
+  isSubmittingAction = false,
   onShowResults,
 }: BoardProps) {
   const gameState = roomSnapshot.gameState;
@@ -687,7 +689,7 @@ export function Board({
                     type="button"
                     className="btn-primary-action btn-start-game-large"
                     onClick={onStartGame}
-                    disabled={roomSnapshot.players.length < 2}
+                    disabled={roomSnapshot.players.length < 2 || isSubmittingAction}
                   >
                     <span>▶ Start Game</span>
                   </button>
@@ -719,7 +721,7 @@ export function Board({
                       type="button"
                       className="btn-secondary-action btn-pay-prison-fine"
                       onClick={onPayPrisonFine}
-                      disabled={(myPlayerState?.cash ?? 0) < 50}
+                      disabled={(myPlayerState?.cash ?? 0) < 50 || isSubmittingAction}
                     >
                       🔓 Pay $50 Fine & Exit
                     </button>
@@ -729,7 +731,7 @@ export function Board({
                     type="button"
                     className="btn-primary-action btn-roll-prominent"
                     onClick={onRollDice}
-                    disabled={isRolling}
+                    disabled={isRolling || isSubmittingAction}
                   >
                     <span>🎲</span>
                     <span>
@@ -754,7 +756,7 @@ export function Board({
                       type="button"
                       className="btn-primary-action btn-buy-btn"
                       onClick={onBuyProperty}
-                      disabled={!canAffordCurrentSpace}
+                      disabled={!canAffordCurrentSpace || isSubmittingAction}
                     >
                       Buy for ${currentLandingSpace.price}
                     </button>
@@ -763,6 +765,7 @@ export function Board({
                       type="button"
                       className="btn-secondary-action btn-decline-btn"
                       onClick={onDeclineProperty}
+                      disabled={isSubmittingAction}
                     >
                       Decline
                     </button>
@@ -776,6 +779,7 @@ export function Board({
                   type="button"
                   className="btn-primary-action btn-end-turn-action"
                   onClick={onEndTurn}
+                  disabled={isSubmittingAction}
                 >
                   <span>End Turn ⏭</span>
                 </button>

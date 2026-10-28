@@ -31,3 +31,6 @@ coverage/
 .vitest/
 test-results/
 playwright-report/
+
+# Local persistence storage
+.charchokkha-data/
