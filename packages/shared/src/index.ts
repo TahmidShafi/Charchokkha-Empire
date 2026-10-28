@@ -14,6 +14,7 @@ export const SOCKET_EVENTS = {
   // Room operations (Client -> Server)
   ROOM_CREATE: 'room:create',
   ROOM_JOIN: 'room:join',
+  ROOM_SPECTATE: 'room:spectate',
   ROOM_LEAVE: 'room:leave',
   ROOM_UPDATE_SETTINGS: 'room:update_settings',
   ROOM_GET_SNAPSHOT: 'room:get_snapshot',
@@ -24,6 +25,8 @@ export const SOCKET_EVENTS = {
   ROOM_PLAYER_JOINED: 'room:player_joined',
   ROOM_PLAYER_LEFT: 'room:player_left',
   ROOM_PLAYER_RECONNECTED: 'room:player_reconnected',
+  ROOM_SPECTATOR_JOINED: 'room:spectator_joined',
+  ROOM_SPECTATOR_LEFT: 'room:spectator_left',
 
   // Game operations (Client -> Server)
   GAME_START: 'game:start',
@@ -247,6 +250,7 @@ export const RoomSnapshotSchema = z.object({
   players: z.array(PlayerSchema),
   createdAt: z.number(),
   gameState: GameStateSchema.optional(),
+  spectatorCount: z.number().int().nonnegative().optional(),
 });
 
 export type RoomSnapshot = z.infer<typeof RoomSnapshotSchema>;
@@ -275,9 +279,17 @@ export const JoinRoomPayloadSchema = z.object({
   roomCode: z.string().trim().min(3, 'Room code must have at least 3 characters').max(10),
   nickname: z.string().trim().min(1, 'Nickname must not be empty').max(25),
   avatar: z.string().optional(),
+  asSpectator: z.boolean().optional(),
 });
 
 export type JoinRoomPayload = z.infer<typeof JoinRoomPayloadSchema>;
+
+export const SpectateRoomPayloadSchema = z.object({
+  roomCode: z.string().trim().min(3, 'Room code must have at least 3 characters').max(10),
+  nickname: z.string().trim().min(1).max(25).optional(),
+});
+
+export type SpectateRoomPayload = z.infer<typeof SpectateRoomPayloadSchema>;
 
 export const LeaveRoomPayloadSchema = z.object({
   roomCode: z.string().trim().min(3).max(10).optional(),

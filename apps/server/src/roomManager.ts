@@ -35,12 +35,20 @@ export interface GuestSession {
   socketId: string;
   connected: boolean;
   currentRoomCode?: string;
+  isSpectator?: boolean;
   createdAt: number;
   lastActiveAt: number;
 }
 
 export interface ServerPlayer extends Player {
   sessionId: string;
+  joinedAt: number;
+}
+
+export interface ServerSpectator {
+  sessionId: string;
+  nickname: string;
+  socketId: string;
   joinedAt: number;
 }
 
@@ -51,6 +59,7 @@ export interface ServerRoom {
   sequenceNumber: number;
   settings: RoomSettings;
   players: Map<string, ServerPlayer>; // Keyed by sessionId
+  spectators: Map<string, ServerSpectator>; // Keyed by sessionId
   createdAt: number;
   actionQueue: Promise<void>;
   gameState?: EngineGameState;
@@ -198,12 +207,14 @@ export class RoomManager {
       sequenceNumber: 1,
       settings: finalSettings,
       players: new Map([[session.sessionId, hostPlayer]]),
+      spectators: new Map(),
       createdAt: Date.now(),
       actionQueue: Promise.resolve(),
     };
 
     this.rooms.set(code, room);
     session.currentRoomCode = code;
+    session.isSpectator = false;
 
     return this.toSnapshot(room);
   }
@@ -238,6 +249,7 @@ export class RoomManager {
       existingPlayer.nickname = session.nickname;
       existingPlayer.avatar = session.avatar;
       session.currentRoomCode = code;
+      session.isSpectator = false;
       room.sequenceNumber += 1;
 
       return {
@@ -250,6 +262,12 @@ export class RoomManager {
     if (session.currentRoomCode && session.currentRoomCode !== code) {
       this.leaveRoom(session, session.currentRoomCode);
     }
+
+    // If session was a spectator in this room, remove from spectators
+    if (room.spectators.has(session.sessionId)) {
+      room.spectators.delete(session.sessionId);
+    }
+    session.isSpectator = false;
 
     // Enforce capacity on server
     if (room.players.size >= room.settings.maxPlayers) {
@@ -276,12 +294,58 @@ export class RoomManager {
 
     room.players.set(session.sessionId, newPlayer);
     session.currentRoomCode = code;
+    session.isSpectator = false;
     room.sequenceNumber += 1;
 
     return {
       snapshot: this.toSnapshot(room),
       isReconnect: false,
     };
+  }
+
+  /**
+   * Joins a room as a read-only spectator without claiming a seat.
+   */
+  public spectateRoom(
+    session: GuestSession,
+    roomCode: string,
+    nickname?: string
+  ): RoomSnapshot {
+    const code = roomCode.trim().toUpperCase();
+    const room = this.rooms.get(code);
+
+    if (!room) {
+      throw new Error(`Room not found: ${code}`);
+    }
+
+    if (room.state === 'abandoned' || room.state === 'finished') {
+      throw new Error(`Cannot spectate room: status is ${room.state}`);
+    }
+
+    if (nickname) {
+      session.nickname = nickname.trim() || session.nickname;
+    }
+
+    // Leave any other room if different
+    if (session.currentRoomCode && session.currentRoomCode !== code) {
+      this.leaveRoom(session, session.currentRoomCode);
+    }
+
+    // If not already seated, register as spectator
+    if (!room.players.has(session.sessionId)) {
+      room.spectators.set(session.sessionId, {
+        sessionId: session.sessionId,
+        nickname: session.nickname,
+        socketId: session.socketId,
+        joinedAt: Date.now(),
+      });
+      session.isSpectator = true;
+    }
+
+    session.currentRoomCode = code;
+    room.sequenceNumber += 1;
+
+    return this.toSnapshot(room);
   }
 
   /**
@@ -296,11 +360,27 @@ export class RoomManager {
 
     if (!room) {
       session.currentRoomCode = undefined;
+      session.isSpectator = false;
       return { leftCode: code, abandoned: false };
     }
 
+    // Handle spectator departure
+    if (room.spectators?.has(session.sessionId)) {
+      room.spectators.delete(session.sessionId);
+      session.currentRoomCode = undefined;
+      session.isSpectator = false;
+      room.sequenceNumber += 1;
+      return {
+        leftCode: code,
+        snapshot: this.toSnapshot(room),
+        abandoned: false,
+      };
+    }
+
+    // Handle seated player departure
     room.players.delete(session.sessionId);
     session.currentRoomCode = undefined;
+    session.isSpectator = false;
     room.sequenceNumber += 1;
 
     // If host left, migrate host to next active player
@@ -313,7 +393,7 @@ export class RoomManager {
       }
     }
 
-    // If room is empty, mark abandoned
+    // If room is empty of players, mark abandoned
     if (room.players.size === 0) {
       room.state = 'abandoned';
       return { leftCode: code, abandoned: true };
@@ -340,7 +420,8 @@ export class RoomManager {
       throw new Error(`Room not found: ${code}`);
     }
 
-    // Server-side authorization check: must be host
+    // Server-side authorization check: must be a seated player and host
+    this.ensureSeatedPlayer(room, session);
     if (room.hostSessionId !== session.sessionId) {
       throw new Error('Only the room host can modify game settings');
     }
@@ -397,7 +478,8 @@ export class RoomManager {
   }
 
   /**
-   * Handles socket disconnect, marking player temporarily disconnected without losing seat.
+   * Handles socket disconnect, marking player temporarily disconnected without losing seat,
+   * or removing spectators cleanly.
    */
   public handleSocketDisconnect(socketId: string): {
     session: GuestSession;
@@ -412,20 +494,43 @@ export class RoomManager {
 
     if (session.currentRoomCode) {
       const room = this.rooms.get(session.currentRoomCode);
-      if (room && room.players.has(session.sessionId)) {
-        const player = room.players.get(session.sessionId)!;
-        player.connected = false;
-        room.sequenceNumber += 1;
+      if (room) {
+        if (room.spectators?.has(session.sessionId)) {
+          room.spectators.delete(session.sessionId);
+          room.sequenceNumber += 1;
+          return {
+            session,
+            roomCode: room.code,
+            snapshot: this.toSnapshot(room),
+          };
+        }
 
-        return {
-          session,
-          roomCode: room.code,
-          snapshot: this.toSnapshot(room),
-        };
+        if (room.players.has(session.sessionId)) {
+          const player = room.players.get(session.sessionId)!;
+          player.connected = false;
+          room.sequenceNumber += 1;
+
+          return {
+            session,
+            roomCode: room.code,
+            snapshot: this.toSnapshot(room),
+          };
+        }
       }
     }
 
     return { session };
+  }
+
+  /**
+   * Ensures the session is an active seated player in the room, rejecting spectators.
+   */
+  private ensureSeatedPlayer(room: ServerRoom, session: GuestSession): ServerPlayer {
+    const player = room.players.get(session.sessionId);
+    if (!player) {
+      throw new Error('Spectators are not permitted to perform player actions');
+    }
+    return player;
   }
 
   /**
@@ -437,6 +542,8 @@ export class RoomManager {
     if (!room) {
       throw new Error(`Room not found: ${code}`);
     }
+
+    this.ensureSeatedPlayer(room, session);
 
     if (room.hostSessionId !== session.sessionId) {
       throw new Error('Only the room host can start the game');
@@ -493,6 +600,8 @@ export class RoomManager {
       throw new Error(`Room not found: ${code}`);
     }
 
+    this.ensureSeatedPlayer(room, session);
+
     if (room.state !== 'in_progress' || !room.gameState) {
       throw new Error('Game is not in progress');
     }
@@ -530,6 +639,8 @@ export class RoomManager {
       throw new Error(`Room not found: ${code}`);
     }
 
+    this.ensureSeatedPlayer(room, session);
+
     if (room.state !== 'in_progress' || !room.gameState) {
       throw new Error('Game is not in progress');
     }
@@ -558,6 +669,8 @@ export class RoomManager {
     if (!room) {
       throw new Error(`Room not found: ${code}`);
     }
+
+    this.ensureSeatedPlayer(room, session);
 
     if (room.state !== 'in_progress' || !room.gameState) {
       throw new Error('Game is not in progress');
@@ -588,6 +701,8 @@ export class RoomManager {
       throw new Error('Game is not in progress');
     }
 
+    this.ensureSeatedPlayer(room, session);
+
     const result = processDeclineProperty(room.gameState, session.sessionId);
     if (!result.success) {
       throw new Error(result.error?.message ?? 'Failed to decline property');
@@ -607,6 +722,8 @@ export class RoomManager {
     if (!room || room.state !== 'in_progress' || !room.gameState) {
       throw new Error('Game is not in progress');
     }
+
+    this.ensureSeatedPlayer(room, session);
 
     const result = processAuctionBid(room.gameState, session.sessionId, bidAmount);
     if (!result.success) {
@@ -628,6 +745,8 @@ export class RoomManager {
       throw new Error('Game is not in progress');
     }
 
+    this.ensureSeatedPlayer(room, session);
+
     const result = processAuctionPass(room.gameState, session.sessionId);
     if (!result.success) {
       throw new Error(result.error?.message ?? 'Failed to pass auction');
@@ -647,6 +766,8 @@ export class RoomManager {
     if (!room || room.state !== 'in_progress' || !room.gameState) {
       throw new Error('Game is not in progress');
     }
+
+    this.ensureSeatedPlayer(room, session);
 
     const result = processPayPrisonFine(room.gameState, session.sessionId);
     if (!result.success) {
@@ -668,6 +789,8 @@ export class RoomManager {
       throw new Error('Game is not in progress');
     }
 
+    this.ensureSeatedPlayer(room, session);
+
     const result = processMortgageProperty(room.gameState, session.sessionId, spaceId);
     if (!result.success) {
       throw new Error(result.error?.message ?? 'Failed to mortgage property');
@@ -687,6 +810,8 @@ export class RoomManager {
     if (!room || room.state !== 'in_progress' || !room.gameState) {
       throw new Error('Game is not in progress');
     }
+
+    this.ensureSeatedPlayer(room, session);
 
     const result = processUnmortgageProperty(room.gameState, session.sessionId, spaceId);
     if (!result.success) {
@@ -708,6 +833,8 @@ export class RoomManager {
       throw new Error('Game is not in progress');
     }
 
+    this.ensureSeatedPlayer(room, session);
+
     const result = processBuildHouse(room.gameState, session.sessionId, spaceId);
     if (!result.success) {
       throw new Error(result.error?.message ?? 'Failed to build house');
@@ -727,6 +854,8 @@ export class RoomManager {
     if (!room || room.state !== 'in_progress' || !room.gameState) {
       throw new Error('Game is not in progress');
     }
+
+    this.ensureSeatedPlayer(room, session);
 
     const result = processSellHouse(room.gameState, session.sessionId, spaceId);
     if (!result.success) {
@@ -758,6 +887,8 @@ export class RoomManager {
       throw new Error('Game is not in progress');
     }
 
+    this.ensureSeatedPlayer(room, session);
+
     const result = processCreateTrade(room.gameState, session.sessionId, trade);
     if (!result.success) {
       throw new Error(result.error?.message ?? 'Failed to create trade offer');
@@ -777,6 +908,8 @@ export class RoomManager {
     if (!room || room.state !== 'in_progress' || !room.gameState) {
       throw new Error('Game is not in progress');
     }
+
+    this.ensureSeatedPlayer(room, session);
 
     const result = processAcceptTrade(room.gameState, session.sessionId);
     if (!result.success) {
@@ -798,6 +931,8 @@ export class RoomManager {
       throw new Error('Game is not in progress');
     }
 
+    this.ensureSeatedPlayer(room, session);
+
     const result = processRejectTrade(room.gameState, session.sessionId);
     if (!result.success) {
       throw new Error(result.error?.message ?? 'Failed to reject trade offer');
@@ -817,6 +952,8 @@ export class RoomManager {
     if (!room || room.state !== 'in_progress' || !room.gameState) {
       throw new Error('Game is not in progress');
     }
+
+    this.ensureSeatedPlayer(room, session);
 
     const result = processDeclareBankruptcy(room.gameState, session.sessionId, creditorId);
     if (!result.success) {
@@ -861,6 +998,7 @@ export class RoomManager {
       sequenceNumber: room.sequenceNumber,
       settings: { ...room.settings },
       players: safePlayers,
+      spectatorCount: room.spectators?.size ?? 0,
       createdAt: room.createdAt,
       gameState: safeGameState,
     };

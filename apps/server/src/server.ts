@@ -6,6 +6,7 @@ import {
   GetSnapshotPayloadSchema,
   HealthCheckResponseSchema,
   JoinRoomPayloadSchema,
+  SpectateRoomPayloadSchema,
   LeaveRoomPayloadSchema,
   PingPayloadSchema,
   SOCKET_EVENTS,
@@ -234,6 +235,27 @@ export function createAppServer(options: ServerOptions = {}) {
             return;
           }
 
+          if (parsed.data.asSpectator) {
+            const snapshot = await roomManager.enqueueRoomAction(roomCode, () => {
+              return roomManager.spectateRoom(session, roomCode, parsed.data.nickname);
+            });
+
+            socket.join(`room:${snapshot.code}`);
+
+            if (typeof ack === 'function') {
+              ack({ ok: true, data: snapshot });
+            }
+
+            socket.emit(SOCKET_EVENTS.ROOM_SNAPSHOT, snapshot);
+            io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.ROOM_UPDATED, snapshot);
+            io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.ROOM_SPECTATOR_JOINED, {
+              spectatorId: session.sessionId,
+              nickname: session.nickname,
+              spectatorCount: snapshot.spectatorCount ?? 0,
+            });
+            return;
+          }
+
           // Apply join through per-room action queue
           const { snapshot, isReconnect } = await roomManager.enqueueRoomAction(roomCode, () => {
             return roomManager.joinRoom(
@@ -273,6 +295,56 @@ export function createAppServer(options: ServerOptions = {}) {
       }
     );
 
+    // --- Room: Spectate ---
+    socket.on(
+      SOCKET_EVENTS.ROOM_SPECTATE,
+      async (rawPayload: unknown, ack?: (response: SocketAck<RoomSnapshot>) => void) => {
+        const parsed = SpectateRoomPayloadSchema.safeParse(rawPayload);
+        if (!parsed.success) {
+          const err: SocketError = {
+            code: 'INVALID_PAYLOAD',
+            message: 'Validation failed: ' + parsed.error.issues.map((i) => i.message).join(', '),
+            details: parsed.error.flatten(),
+          };
+          if (typeof ack === 'function') ack({ ok: false, error: err });
+          return;
+        }
+
+        const roomCode = parsed.data.roomCode.trim().toUpperCase();
+
+        try {
+          const room = roomManager.getRoom(roomCode);
+          if (!room) {
+            const err: SocketError = { code: 'ROOM_NOT_FOUND', message: `Room ${roomCode} does not exist` };
+            if (typeof ack === 'function') ack({ ok: false, error: err });
+            return;
+          }
+
+          const snapshot = await roomManager.enqueueRoomAction(roomCode, () => {
+            return roomManager.spectateRoom(session, roomCode, parsed.data.nickname);
+          });
+
+          socket.join(`room:${snapshot.code}`);
+
+          if (typeof ack === 'function') {
+            ack({ ok: true, data: snapshot });
+          }
+
+          socket.emit(SOCKET_EVENTS.ROOM_SNAPSHOT, snapshot);
+          io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.ROOM_UPDATED, snapshot);
+          io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.ROOM_SPECTATOR_JOINED, {
+            spectatorId: session.sessionId,
+            nickname: session.nickname,
+            spectatorCount: snapshot.spectatorCount ?? 0,
+          });
+        } catch (error: unknown) {
+          const msg = error instanceof Error ? error.message : 'Failed to spectate room';
+          const err: SocketError = { code: 'SPECTATE_FAILED', message: msg };
+          if (typeof ack === 'function') ack({ ok: false, error: err });
+        }
+      }
+    );
+
     // --- Room: Leave ---
     socket.on(
       SOCKET_EVENTS.ROOM_LEAVE,
@@ -290,6 +362,8 @@ export function createAppServer(options: ServerOptions = {}) {
           return;
         }
 
+        const wasSpectator = Boolean(session.isSpectator);
+
         try {
           const { leftCode, snapshot } = await roomManager.enqueueRoomAction(targetCode, () => {
             return roomManager.leaveRoom(session, targetCode);
@@ -303,10 +377,18 @@ export function createAppServer(options: ServerOptions = {}) {
 
           if (snapshot) {
             io.to(`room:${leftCode}`).emit(SOCKET_EVENTS.ROOM_UPDATED, snapshot);
-            io.to(`room:${leftCode}`).emit(SOCKET_EVENTS.ROOM_PLAYER_LEFT, {
-              playerId: session.sessionId,
-              nickname: session.nickname,
-            });
+            if (wasSpectator) {
+              io.to(`room:${leftCode}`).emit(SOCKET_EVENTS.ROOM_SPECTATOR_LEFT, {
+                spectatorId: session.sessionId,
+                nickname: session.nickname,
+                spectatorCount: snapshot.spectatorCount ?? 0,
+              });
+            } else {
+              io.to(`room:${leftCode}`).emit(SOCKET_EVENTS.ROOM_PLAYER_LEFT, {
+                playerId: session.sessionId,
+                nickname: session.nickname,
+              });
+            }
           }
         } catch {
           if (typeof ack === 'function') ack({ ok: true, data: { leftCode: targetCode } });
@@ -343,7 +425,7 @@ export function createAppServer(options: ServerOptions = {}) {
           io.to(`room:${updatedSnapshot.code}`).emit(SOCKET_EVENTS.ROOM_UPDATED, updatedSnapshot);
         } catch (error: unknown) {
           const msg = error instanceof Error ? error.message : 'Failed to update settings';
-          const code = msg.includes('host') ? 'FORBIDDEN' : 'SETTINGS_UPDATE_FAILED';
+          const code = (msg.includes('host') || msg.includes('Spectator') || msg.includes('not permitted')) ? 'FORBIDDEN' : 'SETTINGS_UPDATE_FAILED';
           const err: SocketError = { code, message: msg };
           if (typeof ack === 'function') ack({ ok: false, error: err });
         }
@@ -412,7 +494,7 @@ export function createAppServer(options: ServerOptions = {}) {
         } catch (error: unknown) {
           const msg = error instanceof Error ? error.message : 'Failed to start game';
           let code = 'GAME_START_FAILED';
-          if (msg.includes('host')) code = 'FORBIDDEN';
+          if (msg.includes('host') || msg.includes('Spectator') || msg.includes('not permitted')) code = 'FORBIDDEN';
           else if (msg.includes('At least 2 players')) code = 'INSUFFICIENT_PLAYERS';
           else if (msg.includes('already in progress')) code = 'GAME_ALREADY_STARTED';
           const err: SocketError = { code, message: msg };
@@ -458,7 +540,8 @@ export function createAppServer(options: ServerOptions = {}) {
         } catch (error: unknown) {
           const msg = error instanceof Error ? error.message : 'Failed to roll dice';
           let code = 'ROLL_DICE_FAILED';
-          if (msg.includes('not your turn')) code = 'NOT_YOUR_TURN';
+          if (msg.includes('Spectator') || msg.includes('not permitted')) code = 'FORBIDDEN';
+          else if (msg.includes('not your turn')) code = 'NOT_YOUR_TURN';
           else if (msg.includes('already rolled')) code = 'ALREADY_ROLLED';
           else if (msg.includes('not in progress')) code = 'GAME_NOT_IN_PROGRESS';
           const err: SocketError = { code, message: msg };
@@ -504,7 +587,8 @@ export function createAppServer(options: ServerOptions = {}) {
         } catch (error: unknown) {
           const msg = error instanceof Error ? error.message : 'Failed to purchase property';
           let code = 'BUY_PROPERTY_FAILED';
-          if (msg.includes('not your turn')) code = 'NOT_YOUR_TURN';
+          if (msg.includes('Spectator') || msg.includes('not permitted')) code = 'FORBIDDEN';
+          else if (msg.includes('not your turn')) code = 'NOT_YOUR_TURN';
           else if (msg.includes('Insufficient funds')) code = 'INSUFFICIENT_FUNDS';
           else if (msg.includes('already owned')) code = 'ALREADY_OWNED';
           else if (msg.includes('cannot be purchased')) code = 'NOT_PURCHASABLE';
@@ -547,7 +631,8 @@ export function createAppServer(options: ServerOptions = {}) {
           }
         } catch (error: unknown) {
           const msg = error instanceof Error ? error.message : 'Failed to decline property';
-          const err: SocketError = { code: 'DECLINE_PROPERTY_FAILED', message: msg };
+          const code = (msg.includes('Spectator') || msg.includes('not permitted')) ? 'FORBIDDEN' : 'DECLINE_PROPERTY_FAILED';
+          const err: SocketError = { code, message: msg };
           if (typeof ack === 'function') ack({ ok: false, error: err });
         }
       }
@@ -586,7 +671,8 @@ export function createAppServer(options: ServerOptions = {}) {
           }
         } catch (error: unknown) {
           const msg = error instanceof Error ? error.message : 'Failed to place auction bid';
-          const err: SocketError = { code: 'AUCTION_BID_FAILED', message: msg };
+          const code = (msg.includes('Spectator') || msg.includes('not permitted')) ? 'FORBIDDEN' : 'AUCTION_BID_FAILED';
+          const err: SocketError = { code, message: msg };
           if (typeof ack === 'function') ack({ ok: false, error: err });
         }
       }
@@ -625,7 +711,8 @@ export function createAppServer(options: ServerOptions = {}) {
           }
         } catch (error: unknown) {
           const msg = error instanceof Error ? error.message : 'Failed to pass auction';
-          const err: SocketError = { code: 'AUCTION_PASS_FAILED', message: msg };
+          const code = (msg.includes('Spectator') || msg.includes('not permitted')) ? 'FORBIDDEN' : 'AUCTION_PASS_FAILED';
+          const err: SocketError = { code, message: msg };
           if (typeof ack === 'function') ack({ ok: false, error: err });
         }
       }
@@ -664,7 +751,8 @@ export function createAppServer(options: ServerOptions = {}) {
           }
         } catch (error: unknown) {
           const msg = error instanceof Error ? error.message : 'Failed to pay prison fine';
-          const err: SocketError = { code: 'PAY_PRISON_FINE_FAILED', message: msg };
+          const code = (msg.includes('Spectator') || msg.includes('not permitted')) ? 'FORBIDDEN' : 'PAY_PRISON_FINE_FAILED';
+          const err: SocketError = { code, message: msg };
           if (typeof ack === 'function') ack({ ok: false, error: err });
         }
       }
@@ -703,7 +791,8 @@ export function createAppServer(options: ServerOptions = {}) {
           }
         } catch (error: unknown) {
           const msg = error instanceof Error ? error.message : 'Failed to mortgage property';
-          const err: SocketError = { code: 'MORTGAGE_PROPERTY_FAILED', message: msg };
+          const code = (msg.includes('Spectator') || msg.includes('not permitted')) ? 'FORBIDDEN' : 'MORTGAGE_PROPERTY_FAILED';
+          const err: SocketError = { code, message: msg };
           if (typeof ack === 'function') ack({ ok: false, error: err });
         }
       }
@@ -742,7 +831,8 @@ export function createAppServer(options: ServerOptions = {}) {
           }
         } catch (error: unknown) {
           const msg = error instanceof Error ? error.message : 'Failed to unmortgage property';
-          const err: SocketError = { code: 'UNMORTGAGE_PROPERTY_FAILED', message: msg };
+          const code = (msg.includes('Spectator') || msg.includes('not permitted')) ? 'FORBIDDEN' : 'UNMORTGAGE_PROPERTY_FAILED';
+          const err: SocketError = { code, message: msg };
           if (typeof ack === 'function') ack({ ok: false, error: err });
         }
       }
@@ -781,7 +871,8 @@ export function createAppServer(options: ServerOptions = {}) {
           }
         } catch (error: unknown) {
           const msg = error instanceof Error ? error.message : 'Failed to build house';
-          const err: SocketError = { code: 'BUILD_HOUSE_FAILED', message: msg };
+          const code = (msg.includes('Spectator') || msg.includes('not permitted')) ? 'FORBIDDEN' : 'BUILD_HOUSE_FAILED';
+          const err: SocketError = { code, message: msg };
           if (typeof ack === 'function') ack({ ok: false, error: err });
         }
       }
@@ -820,7 +911,8 @@ export function createAppServer(options: ServerOptions = {}) {
           }
         } catch (error: unknown) {
           const msg = error instanceof Error ? error.message : 'Failed to sell house';
-          const err: SocketError = { code: 'SELL_HOUSE_FAILED', message: msg };
+          const code = (msg.includes('Spectator') || msg.includes('not permitted')) ? 'FORBIDDEN' : 'SELL_HOUSE_FAILED';
+          const err: SocketError = { code, message: msg };
           if (typeof ack === 'function') ack({ ok: false, error: err });
         }
       }
@@ -865,7 +957,8 @@ export function createAppServer(options: ServerOptions = {}) {
           }
         } catch (error: unknown) {
           const msg = error instanceof Error ? error.message : 'Failed to create trade offer';
-          const err: SocketError = { code: 'TRADE_CREATE_FAILED', message: msg };
+          const code = (msg.includes('Spectator') || msg.includes('not permitted')) ? 'FORBIDDEN' : 'TRADE_CREATE_FAILED';
+          const err: SocketError = { code, message: msg };
           if (typeof ack === 'function') ack({ ok: false, error: err });
         }
       }
@@ -904,7 +997,8 @@ export function createAppServer(options: ServerOptions = {}) {
           }
         } catch (error: unknown) {
           const msg = error instanceof Error ? error.message : 'Failed to accept trade offer';
-          const err: SocketError = { code: 'TRADE_ACCEPT_FAILED', message: msg };
+          const code = (msg.includes('Spectator') || msg.includes('not permitted')) ? 'FORBIDDEN' : 'TRADE_ACCEPT_FAILED';
+          const err: SocketError = { code, message: msg };
           if (typeof ack === 'function') ack({ ok: false, error: err });
         }
       }
@@ -943,7 +1037,8 @@ export function createAppServer(options: ServerOptions = {}) {
           }
         } catch (error: unknown) {
           const msg = error instanceof Error ? error.message : 'Failed to reject trade offer';
-          const err: SocketError = { code: 'TRADE_REJECT_FAILED', message: msg };
+          const code = (msg.includes('Spectator') || msg.includes('not permitted')) ? 'FORBIDDEN' : 'TRADE_REJECT_FAILED';
+          const err: SocketError = { code, message: msg };
           if (typeof ack === 'function') ack({ ok: false, error: err });
         }
       }
@@ -982,7 +1077,8 @@ export function createAppServer(options: ServerOptions = {}) {
           }
         } catch (error: unknown) {
           const msg = error instanceof Error ? error.message : 'Failed to declare bankruptcy';
-          const err: SocketError = { code: 'DECLARE_BANKRUPTCY_FAILED', message: msg };
+          const code = (msg.includes('Spectator') || msg.includes('not permitted')) ? 'FORBIDDEN' : 'DECLARE_BANKRUPTCY_FAILED';
+          const err: SocketError = { code, message: msg };
           if (typeof ack === 'function') ack({ ok: false, error: err });
         }
       }
@@ -1025,7 +1121,8 @@ export function createAppServer(options: ServerOptions = {}) {
         } catch (error: unknown) {
           const msg = error instanceof Error ? error.message : 'Failed to end turn';
           let code = 'END_TURN_FAILED';
-          if (msg.includes('not your turn')) code = 'NOT_YOUR_TURN';
+          if (msg.includes('Spectator') || msg.includes('not permitted')) code = 'FORBIDDEN';
+          else if (msg.includes('not your turn')) code = 'NOT_YOUR_TURN';
           else if (msg.includes('must roll')) code = 'MUST_ROLL_FIRST';
           const err: SocketError = { code, message: msg };
           if (typeof ack === 'function') ack({ ok: false, error: err });
