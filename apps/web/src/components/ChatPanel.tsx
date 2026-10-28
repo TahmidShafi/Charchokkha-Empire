@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 export interface ChatMessage {
   id: string;
@@ -21,63 +21,95 @@ export function ChatPanel({
   isMobileModal,
 }: ChatPanelProps) {
   const [inputText, setInputText] = useState('');
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll on new messages
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
 
   const handleSend = (e: React.FormEvent) => {
     e.preventDefault();
-    if (inputText.trim()) {
-      onSendMessage(inputText.trim());
+    const cleanText = inputText.trim();
+    if (cleanText) {
+      onSendMessage(cleanText);
       setInputText('');
     }
   };
 
   return (
-    <div className={`room-chat-panel ${isMobileModal ? 'mobile-chat-modal' : ''}`}>
-      <div className="chat-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span>Chat</span>
+    <div
+      className={`room-chat-panel ${isMobileModal ? 'mobile-chat-modal' : ''}`}
+      role="region"
+      aria-label="Table Chat"
+    >
+      {/* Header */}
+      <div className="chat-header-bar">
+        <div className="chat-header-left">
+          <span className="chat-header-icon" aria-hidden="true">💬</span>
+          <span className="chat-header-title">Table Chat</span>
+          <span className="chat-message-count-badge">{messages.length}</span>
+        </div>
         {isMobileModal && (
           <button
             type="button"
+            className="dialog-close-btn"
             onClick={onCloseMobile}
-            style={{ background: 'transparent', border: 'none', color: '#fff', fontSize: '1.25rem', cursor: 'pointer' }}
+            aria-label="Close chat"
           >
             ✕
           </button>
         )}
       </div>
 
-      <div className="chat-messages">
+      {/* Messages Feed */}
+      <div className="chat-messages-container" tabIndex={0} aria-live="polite">
         {messages.length === 0 ? (
           <div className="chat-empty-hint">
-            <span>💬</span> No messages yet
+            <span className="chat-empty-icon" aria-hidden="true">💭</span>
+            <span>No messages yet. Say hello to the table!</span>
           </div>
         ) : (
           messages.map((m) => (
-            <div key={m.id} className="chat-msg-row">
+            <div
+              key={m.id}
+              className={`chat-msg-row ${m.isSystem ? 'msg-system' : 'msg-player'}`}
+            >
               {m.isSystem ? (
-                <span style={{ color: '#94a3b8', fontStyle: 'italic', fontSize: '0.75rem' }}>
-                  {m.text}
-                </span>
+                <div className="chat-system-bubble">
+                  <span className="system-dot" aria-hidden="true">•</span>
+                  <span className="system-text">{m.text}</span>
+                </div>
               ) : (
-                <>
-                  <span className="chat-sender">{m.sender}:</span>
-                  <span className="chat-text">{m.text}</span>
-                </>
+                <div className="chat-player-bubble">
+                  <span className="chat-sender-name">{m.sender}</span>
+                  <span className="chat-bubble-text">{m.text}</span>
+                </div>
               )}
             </div>
           ))
         )}
+        <div ref={messagesEndRef} />
       </div>
 
+      {/* Input Bar */}
       <form className="chat-input-bar" onSubmit={handleSend}>
         <input
           type="text"
-          className="chat-input"
-          placeholder="Say something..."
+          className="chat-text-input"
+          placeholder="Say something to table..."
           value={inputText}
           onChange={(e) => setInputText(e.target.value)}
-          maxLength={100}
+          maxLength={120}
+          aria-label="Type message"
         />
-        <button type="submit" className="chat-send-btn" disabled={!inputText.trim()}>
+        <button
+          type="submit"
+          className="chat-send-submit-btn"
+          disabled={!inputText.trim()}
+          title="Send message"
+          aria-label="Send message"
+        >
           ➤
         </button>
       </form>
