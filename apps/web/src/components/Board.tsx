@@ -89,7 +89,9 @@ export function Board({
 
   // Animation & Audio State
   const [displayedPositions, setDisplayedPositions] = useState<Record<string, number>>({});
+  const displayedPositionsRef = useRef<Record<string, number>>({});
   const [isDiceAnimating, setIsDiceAnimating] = useState(false);
+  const [isTokenMoving, setIsTokenMoving] = useState(false);
   const [recentEventAlert, setRecentEventAlert] = useState<{
     id: string;
     text: string;
@@ -100,8 +102,15 @@ export function Board({
   const prevActionMsgRef = useRef<string>('');
   const prevActivePlayerRef = useRef<string | undefined>(activePlayerId);
   const movementIntervalsRef = useRef<Record<string, NodeJS.Timeout>>({});
+  const movementTimeoutsRef = useRef<Record<string, NodeJS.Timeout>>({});
+  const diceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isInitialMountRef = useRef<boolean>(true);
   const alertTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const updatePosition = (playerId: string, pos: number) => {
+    displayedPositionsRef.current[playerId] = pos;
+    setDisplayedPositions((prev) => ({ ...prev, [playerId]: pos }));
+  };
 
   // Synchronize displayed positions and trigger step animations
   useEffect(() => {
@@ -111,7 +120,10 @@ export function Board({
       roomSnapshot.players.forEach((p) => {
         initialMap[p.id] = gameState?.players[p.id]?.position ?? 0;
       });
+      displayedPositionsRef.current = { ...initialMap };
       setDisplayedPositions(initialMap);
+      setIsTokenMoving(false);
+      setIsDiceAnimating(false);
       isInitialMountRef.current = false;
       prevActivePlayerRef.current = activePlayerId;
       if (gameState?.lastDiceRoll) {
@@ -120,49 +132,61 @@ export function Board({
       return;
     }
 
+    const reduced = prefersReducedMotion();
+
     // 2. Animate dice when a new authoritative dice roll arrives
+    let hasNewRoll = false;
     if (gameState?.lastDiceRoll) {
       const rollKey = `${gameState.lastDiceRoll.die1}_${gameState.lastDiceRoll.die2}_${gameState.lastDiceRoll.total}_${roomSnapshot.sequenceNumber}`;
       if (rollKey !== prevRollKeyRef.current && isGameStarted) {
         prevRollKeyRef.current = rollKey;
+        hasNewRoll = true;
         soundManager.playDiceRoll();
-        if (!prefersReducedMotion()) {
+        if (!reduced) {
           setIsDiceAnimating(true);
-          const diceTimer = setTimeout(() => setIsDiceAnimating(false), 450);
-          return () => clearTimeout(diceTimer);
+          if (diceTimeoutRef.current) clearTimeout(diceTimeoutRef.current);
+          diceTimeoutRef.current = setTimeout(() => {
+            setIsDiceAnimating(false);
+          }, 320);
         }
       }
     }
 
     // 3. Tile-by-tile token stepping for each seated player
-    const reduced = prefersReducedMotion();
     roomSnapshot.players.forEach((p) => {
       const targetPos = gameState?.players[p.id]?.position ?? 0;
-      const currentPos = displayedPositions[p.id] ?? targetPos;
+      const currentPos = displayedPositionsRef.current[p.id] ?? targetPos;
 
       if (targetPos === currentPos) return;
 
-      // Clear any prior active movement timer for this player
+      // Clear any prior active timers for this player
       if (movementIntervalsRef.current[p.id]) {
         clearInterval(movementIntervalsRef.current[p.id]);
         delete movementIntervalsRef.current[p.id];
       }
+      if (movementTimeoutsRef.current[p.id]) {
+        clearTimeout(movementTimeoutsRef.current[p.id]);
+        delete movementTimeoutsRef.current[p.id];
+      }
 
       if (reduced) {
         // Immediate jump if reduced motion is requested
-        setDisplayedPositions((prev) => ({ ...prev, [p.id]: targetPos }));
+        updatePosition(p.id, targetPos);
+        setIsTokenMoving(false);
         return;
       }
 
       const path = calculateStepPath(currentPos, targetPos);
       if (path.length === 0) {
-        setDisplayedPositions((prev) => ({ ...prev, [p.id]: targetPos }));
+        updatePosition(p.id, targetPos);
+        setIsTokenMoving(false);
         return;
       }
 
       // If direct transfer (e.g. Go to Prison direct jump)
       if (path.length === 1) {
-        setDisplayedPositions((prev) => ({ ...prev, [p.id]: targetPos }));
+        updatePosition(p.id, targetPos);
+        setIsTokenMoving(false);
         if (targetPos === 10) {
           soundManager.playGoToPrison();
         }
@@ -170,26 +194,41 @@ export function Board({
       }
 
       // Step along the path tile-by-tile
-      let stepIndex = 0;
-      const stepInterval = setInterval(() => {
-        if (stepIndex < path.length) {
-          const nextTile = path[stepIndex];
-          setDisplayedPositions((prev) => ({ ...prev, [p.id]: nextTile }));
-          soundManager.playStepHop();
-          stepIndex++;
-        } else {
-          clearInterval(stepInterval);
-          delete movementIntervalsRef.current[p.id];
-          setDisplayedPositions((prev) => ({ ...prev, [p.id]: targetPos }));
-        }
-      }, 105);
+      setIsTokenMoving(true);
+      const startDelay = hasNewRoll ? 300 : 0; // Brief delay while dice tumble
 
-      movementIntervalsRef.current[p.id] = stepInterval;
+      movementTimeoutsRef.current[p.id] = setTimeout(() => {
+        let stepIndex = 0;
+        const stepInterval = setInterval(() => {
+          if (stepIndex < path.length) {
+            const nextTile = path[stepIndex];
+            updatePosition(p.id, nextTile);
+            soundManager.playStepHop();
+            stepIndex++;
+          } else {
+            clearInterval(stepInterval);
+            delete movementIntervalsRef.current[p.id];
+            updatePosition(p.id, targetPos);
+            setIsTokenMoving(false);
+            if (targetPos === 10 && gameState?.players[p.id]?.inPrison) {
+              soundManager.playGoToPrison();
+            }
+          }
+        }, 95);
+
+        movementIntervalsRef.current[p.id] = stepInterval;
+      }, startDelay);
     });
 
     return () => {
       Object.values(movementIntervalsRef.current).forEach(clearInterval);
       movementIntervalsRef.current = {};
+      Object.values(movementTimeoutsRef.current).forEach(clearTimeout);
+      movementTimeoutsRef.current = {};
+      if (diceTimeoutRef.current) {
+        clearTimeout(diceTimeoutRef.current);
+        diceTimeoutRef.current = null;
+      }
     };
   }, [roomSnapshot.sequenceNumber, gameState?.lastDiceRoll, gameState?.players, isGameStarted]);
 
@@ -714,7 +753,20 @@ export function Board({
                 View Match Results 🏆
               </button>
             ) : isMyTurn ? (
-              turnPhase === 'need_roll' ? (
+              isTokenMoving || isDiceAnimating ? (
+                <div className="landing-decision-card token-moving-stage-card" role="status" aria-live="polite">
+                  <div className="decision-prop-info">
+                    <span className="decision-title">
+                      {isDiceAnimating ? 'Rolling dice...' : 'Advancing to space...'}
+                    </span>
+                    <span className="decision-cost">
+                      {gameState?.lastDiceRoll
+                        ? `Rolled ${gameState.lastDiceRoll.total} (${gameState.lastDiceRoll.die1} + ${gameState.lastDiceRoll.die2})`
+                        : 'Moving...'}
+                    </span>
+                  </div>
+                </div>
+              ) : turnPhase === 'need_roll' ? (
                 <>
                   {myPlayerState?.inPrison && (
                     <button
@@ -799,7 +851,7 @@ export function Board({
                   id="btn-open-trade"
                   className="btn-secondary-action btn-utility-action"
                   onClick={() => setIsTradeModalOpen(true)}
-                  disabled={otherPlayers.length === 0}
+                  disabled={otherPlayers.length === 0 || isTokenMoving || isSubmittingAction}
                 >
                   <span>🤝 Trade</span>
                 </button>
@@ -809,6 +861,7 @@ export function Board({
                     type="button"
                     id="btn-declare-bankruptcy"
                     className="btn-danger-action btn-utility-action"
+                    disabled={isTokenMoving || isSubmittingAction}
                     onClick={() => {
                       if (
                         window.confirm(
