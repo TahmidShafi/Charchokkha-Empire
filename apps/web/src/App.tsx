@@ -137,7 +137,7 @@ export default function App() {
     };
   }, []);
 
-  const handleCreateRoom = () => {
+  const handleCreateRoom = (avatar: string = '🟢', isPrivate: boolean = false) => {
     if (!socket) {
       setServerError('Connecting to game server...');
       return;
@@ -146,7 +146,11 @@ export default function App() {
 
     socket.emit(
       SOCKET_EVENTS.ROOM_CREATE,
-      { nickname: nickname.trim() || 'Hateful Escape' },
+      {
+        nickname: nickname.trim() || 'Player',
+        avatar,
+        settings: isPrivate ? { isPrivate: true } : undefined,
+      },
       (ack: SocketAck<RoomSnapshot>) => {
         if (!ack.ok) {
           setServerError(ack.error.message);
@@ -167,7 +171,7 @@ export default function App() {
     );
   };
 
-  const handleJoinByCode = (code: string) => {
+  const handleJoinByCode = (code: string, avatar: string = '🟢') => {
     if (!socket) {
       setServerError('Connecting to game server...');
       return;
@@ -176,7 +180,11 @@ export default function App() {
 
     socket.emit(
       SOCKET_EVENTS.ROOM_JOIN,
-      { roomCode: code, nickname: nickname.trim() || 'Guest' },
+      {
+        roomCode: code,
+        nickname: nickname.trim() || 'Player',
+        avatar,
+      },
       (ack: SocketAck<RoomSnapshot>) => {
         if (!ack.ok) {
           setServerError(ack.error.message);
@@ -217,8 +225,8 @@ export default function App() {
         <LandingPage
           nickname={nickname}
           onNicknameChange={setNickname}
-          onPlay={handleCreateRoom}
-          onCreatePrivate={handleCreateRoom}
+          onPlay={(avatar) => handleCreateRoom(avatar, false)}
+          onCreatePrivate={(avatar) => handleCreateRoom(avatar, true)}
           onJoinByCode={handleJoinByCode}
           serverError={serverError}
         />
