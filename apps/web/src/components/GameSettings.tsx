@@ -1,4 +1,5 @@
 import { type GameState, type Player, type RoomSettings } from '@charchokkha/shared';
+import { soundManager } from '../audio/soundManager';
 
 export interface GameSettingsProps {
   playerName: string;
@@ -17,6 +18,8 @@ export interface GameSettingsProps {
   settings?: RoomSettings;
   onUpdateSettings?: (partial: Partial<RoomSettings>) => void;
   gameState?: GameState;
+  isMuted?: boolean;
+  onToggleMute?: () => void;
   onClose?: () => void;
 }
 
@@ -37,6 +40,8 @@ export function GameSettings({
   settings,
   onUpdateSettings,
   gameState,
+  isMuted = false,
+  onToggleMute,
   onClose,
 }: GameSettingsProps) {
   const doubleRent = settings?.doubleRent ?? true;
@@ -95,6 +100,41 @@ export function GameSettings({
           >
             <span>🎨</span> Change Token
           </button>
+        </div>
+
+        {/* Audio & Sound Effects */}
+        <div className="settings-section-card">
+          <div className="section-card-header">
+            <span className="section-title-label">🔊 Audio & Sound Effects</span>
+            <span className="sync-status-badge">{isMuted ? 'Muted' : 'Active'}</span>
+          </div>
+          <div className="audio-controls-row">
+            <button
+              type="button"
+              id="btn-settings-toggle-sound"
+              className={`btn-secondary-action btn-audio-toggle ${isMuted ? 'btn-audio-muted' : ''}`}
+              onClick={onToggleMute}
+              aria-label={isMuted ? 'Unmute all game sound effects' : 'Mute all game sound effects'}
+            >
+              <span>{isMuted ? '🔇 Unmute Sound' : '🔊 Mute Sound'}</span>
+            </button>
+            <button
+              type="button"
+              id="btn-test-sound"
+              className="btn-secondary-action btn-test-audio"
+              onClick={() => {
+                soundManager.initContext();
+                soundManager.playBuyProperty();
+              }}
+              title="Test audio output level"
+              aria-label="Test audio output"
+            >
+              <span>🔔 Test Audio</span>
+            </button>
+          </div>
+          <span className="setting-description-note">
+            Tactile native Web Audio synthesis for dice rolls, token hops, purchases, and rent.
+          </span>
         </div>
 
         {/* Card 2: Connected Players Roster */}

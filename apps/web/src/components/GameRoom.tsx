@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Board } from './Board';
 import { ChatPanel, type ChatMessage } from './ChatPanel';
 import { GameSettings } from './GameSettings';
+import { soundManager } from '../audio/soundManager';
 import {
   SOCKET_EVENTS,
   type Player,
@@ -39,6 +40,12 @@ export function GameRoom({
   const [isDesktopSettingsOpen, setIsDesktopSettingsOpen] = useState(false);
   const [activeMobileTab, setActiveMobileTab] = useState<MobileTab>('board');
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
+  const [isMuted, setIsMuted] = useState(() => soundManager.isMuted());
+
+  const handleToggleMute = () => {
+    const next = soundManager.toggleMuted();
+    setIsMuted(next);
+  };
 
   const roomCode = roomSnapshot.code;
   const roomUrl = `${window.location.origin}/?room=${roomCode}`;
@@ -336,6 +343,19 @@ export function GameRoom({
             <span className="status-live-text">Live Sync</span>
           </div>
 
+          {/* Sound Mute / Unmute Toggle */}
+          <button
+            type="button"
+            id="btn-toggle-sound"
+            className={`header-tool-btn ${isMuted ? 'tool-btn-muted' : ''}`}
+            onClick={handleToggleMute}
+            title={isMuted ? 'Unmute Sound Effects' : 'Mute Sound Effects'}
+            aria-label={isMuted ? 'Unmute Sound Effects' : 'Mute Sound Effects'}
+          >
+            <span>{isMuted ? '🔇' : '🔊'}</span>
+            <span className="btn-label-desktop">{isMuted ? 'Muted' : 'Sound'}</span>
+          </button>
+
           {/* Chat Toggle (Desktop) */}
           <button
             type="button"
@@ -490,6 +510,8 @@ export function GameRoom({
                 settings={roomSnapshot.settings}
                 onUpdateSettings={handleUpdateSettings}
                 gameState={roomSnapshot.gameState}
+                isMuted={isMuted}
+                onToggleMute={handleToggleMute}
               />
             </div>
           )}
@@ -515,6 +537,8 @@ export function GameRoom({
               settings={roomSnapshot.settings}
               onUpdateSettings={handleUpdateSettings}
               gameState={roomSnapshot.gameState}
+              isMuted={isMuted}
+              onToggleMute={handleToggleMute}
               onClose={() => setIsDesktopSettingsOpen(false)}
             />
           </aside>
