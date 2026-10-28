@@ -559,7 +559,6 @@ export function processAuctionPass(state: GameState, playerId: string): EngineAc
       winner.cash -= nextState.auction!.currentBid;
       const winnerStats = getOrCreatePlayerStats(winner);
       winnerStats.auctionsWon += 1;
-      winnerStats.propertiesBought += 1;
       nextState.properties[space.id] = { ownerId: highBidderId, houses: 0, isMortgaged: false };
       nextState.lastActionMessage = `Auction ended! ${highBidderId} won ${space.name} for $${nextState.auction!.currentBid}.`;
     } else {
@@ -574,7 +573,6 @@ export function processAuctionPass(state: GameState, playerId: string): EngineAc
     winner.cash -= nextState.auction!.currentBid;
     const winnerStats = getOrCreatePlayerStats(winner);
     winnerStats.auctionsWon += 1;
-    winnerStats.propertiesBought += 1;
     nextState.properties[space.id] = { ownerId: winnerId, houses: 0, isMortgaged: false };
     nextState.lastActionMessage = `Auction ended! ${winnerId} won ${space.name} for $${nextState.auction!.currentBid}.`;
     nextState.auction = null;
@@ -1081,8 +1079,14 @@ export function calculateStandings(
   }
 
   // Active players sorting:
-  // If winnerId is set and in activeIds, winnerId is placed first.
-  // Other active players are sorted by netWorth desc, then cash desc.
+  // If winnerId is set and is an active player, winnerId is placed first.
+  // Other active players are sorted by netWorth desc, then cash desc, then deterministic ID.
+  const isWinnerActive = Boolean(
+    state.winnerId &&
+    state.players[state.winnerId] &&
+    !state.players[state.winnerId].isBankrupt
+  );
+
   const activeWithNetWorth = activeIds.map((id) => ({
     id,
     netWorth: calculatePlayerNetWorth(state, id),
@@ -1090,14 +1094,17 @@ export function calculateStandings(
   }));
 
   activeWithNetWorth.sort((a, b) => {
-    if (state.winnerId) {
+    if (isWinnerActive && state.winnerId) {
       if (a.id === state.winnerId) return -1;
       if (b.id === state.winnerId) return 1;
     }
     if (b.netWorth !== a.netWorth) {
       return b.netWorth - a.netWorth;
     }
-    return b.cash - a.cash;
+    if (b.cash !== a.cash) {
+      return b.cash - a.cash;
+    }
+    return a.id.localeCompare(b.id);
   });
 
   // Bankrupt players sorting:
@@ -1109,12 +1116,15 @@ export function calculateStandings(
     if (idxA !== -1 && idxB !== -1) {
       return idxB - idxA;
     }
-    const orderA = state.players[a].stats?.bankruptcyOrder ?? 0;
-    const orderB = state.players[b].stats?.bankruptcyOrder ?? 0;
+    if (idxA !== -1) return -1;
+    if (idxB !== -1) return 1;
+
+    const orderA = state.players[a]?.stats?.bankruptcyOrder ?? 0;
+    const orderB = state.players[b]?.stats?.bankruptcyOrder ?? 0;
     if (orderA !== orderB) {
       return orderB - orderA;
     }
-    return 0;
+    return a.localeCompare(b);
   });
 
   const sortedPlayerIds = [

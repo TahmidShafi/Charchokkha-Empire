@@ -137,7 +137,7 @@ describe('Player Net Worth and Standings Engine Unit Tests', () => {
     expect(passRes.success).toBe(true);
     state = passRes.state;
     expect(state.players['p2'].stats?.auctionsWon).toBe(1);
-    expect(state.players['p2'].stats?.propertiesBought).toBe(1);
+    expect(state.players['p2'].stats?.propertiesBought).toBe(0);
 
     // Trade between p1 and p2: p1 gives property 1 to p2, p2 gives property 3?
     // Wait, let's make p1 give property 1 to p2 in exchange for cash so p2 owns both 1 and 3!
@@ -172,5 +172,63 @@ describe('Player Net Worth and Standings Engine Unit Tests', () => {
     expect(state.winnerId).toBe('p2');
     expect(state.eliminationOrder).toEqual(['p1']);
     expect(state.players['p1'].stats?.bankruptcyOrder).toBe(1);
+  });
+
+  it('handles ties, cash tie-breakers, and deterministic player ID ordering', () => {
+    const state = createInitialGameState(['alice', 'bob', 'charlie']);
+    // Bob and Charlie both have identical net worth 1500, but Charlie has more cash
+    state.players['bob'].cash = 1000;
+    state.properties[1] = { ownerId: 'bob', houses: 0, isMortgaged: false }; // Salvador: 60
+    state.properties[3] = { ownerId: 'bob', houses: 0, isMortgaged: false }; // Rio: 60
+    state.players['bob'].cash = 1380; // 1380 + 120 = 1500
+
+    state.players['charlie'].cash = 1500; // 1500 cash, 0 properties = 1500 net worth
+
+    // Alice has less net worth
+    state.players['alice'].cash = 1200;
+
+    const standings = calculateStandings(state, [
+      { id: 'alice', nickname: 'Alice' },
+      { id: 'bob', nickname: 'Bob' },
+      { id: 'charlie', nickname: 'Charlie' },
+    ]);
+
+    // Rank 1: Charlie (1500 net worth, 1500 cash beats Bob's 1380 cash)
+    expect(standings[0].playerId).toBe('charlie');
+    expect(standings[0].rank).toBe(1);
+
+    // Rank 2: Bob (1500 net worth, 1380 cash)
+    expect(standings[1].playerId).toBe('bob');
+    expect(standings[1].rank).toBe(2);
+
+    // Rank 3: Alice (1200 net worth)
+    expect(standings[2].playerId).toBe('alice');
+    expect(standings[2].rank).toBe(3);
+  });
+
+  it('handles edge cases: invalid space IDs, non-purchasable spaces, and partial elimination order', () => {
+    const state = createInitialGameState(['p1', 'p2', 'p3']);
+    // Inject non-purchasable space 0 (START) and out-of-range space 999
+    state.properties[0] = { ownerId: 'p1', houses: 0, isMortgaged: false };
+    state.properties[999] = { ownerId: 'p1', houses: 0, isMortgaged: false };
+    // Normal property 39 (New York: 400)
+    state.properties[39] = { ownerId: 'p1', houses: 0, isMortgaged: false };
+
+    // Net worth should ignore space 0 (no price) and out-of-range space 999 (normalized to 39 in getBoardSpace, but cleanly evaluated without NaN)
+    const nw = calculatePlayerNetWorth(state, 'p1');
+    expect(Number.isFinite(nw)).toBe(true);
+    expect(nw).toBeGreaterThanOrEqual(1500 + 400);
+
+    // Bankrupt edge case: p2 and p3 are bankrupt, but only p2 is in eliminationOrder
+    state.players['p2'].isBankrupt = true;
+    state.players['p3'].isBankrupt = true;
+    state.eliminationOrder = ['p2'];
+
+    const standings = calculateStandings(state);
+    expect(standings).toHaveLength(3);
+    expect(standings[0].playerId).toBe('p1');
+    // p2 is in elimOrder, p3 is not; both bankrupt, deterministic placement
+    expect(standings[1].isBankrupt).toBe(true);
+    expect(standings[2].isBankrupt).toBe(true);
   });
 });
