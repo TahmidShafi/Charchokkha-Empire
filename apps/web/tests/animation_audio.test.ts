@@ -13,7 +13,7 @@ describe('Token Movement Step Path Calculator', () => {
     // Player rolls 4 from space 0 (START)
     expect(calculateStepPath(0, 4)).toEqual([1, 2, 3, 4]);
 
-    // Player rolls 7 from space 5 (TLV Airport)
+    // Player rolls 7 from space 5 (Shongit Airport)
     expect(calculateStepPath(5, 12)).toEqual([6, 7, 8, 9, 10, 11, 12]);
   });
 

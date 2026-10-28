@@ -120,7 +120,7 @@ describe('Authoritative Game Engine — Milestone 4 Suite', () => {
 
     it('awards salary ($200) when landing exactly on START (space 0)', () => {
       const state = createInitialGameState([p1, p2], 1500, 200);
-      state.players[p1].position = 35; // JFK Airport
+      state.players[p1].position = 35; // Gudaraghat Airport
 
       // Roll 5 -> 35 + 5 = 40 -> newPos 0 (START)
       const res = processRollDice(state, p1, [2, 3]);
