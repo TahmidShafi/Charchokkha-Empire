@@ -99,7 +99,13 @@ export function createAppServer(options: ServerOptions = {}) {
 
   const io = new SocketIOServer(httpServer, {
     cors: {
-      origin: allowedOrigins,
+      origin: (origin, callback) => {
+        if (!origin || allowedOrigins.includes('*') || allowedOrigins.includes(origin)) {
+          callback(null, true);
+        } else {
+          callback(new Error('CORS not allowed'), false);
+        }
+      },
       methods: ['GET', 'POST'],
       credentials: true,
     },

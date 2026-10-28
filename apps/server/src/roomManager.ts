@@ -257,6 +257,21 @@ export class RoomManager {
       };
     }
 
+    // Check if existing spectator is reconnecting
+    if (room.spectators.has(session.sessionId)) {
+      if (room.state === 'abandoned') {
+        throw new Error('Cannot spectate room: status is abandoned');
+      }
+      const existingSpectator = room.spectators.get(session.sessionId)!;
+      existingSpectator.socketId = session.socketId;
+      session.isSpectator = true;
+      session.currentRoomCode = code;
+      return {
+        snapshot: this.toSnapshot(room),
+        isReconnect: true,
+      };
+    }
+
     if (room.state === 'abandoned' || room.state === 'finished') {
       throw new Error(`Cannot join room: status is ${room.state}`);
     }

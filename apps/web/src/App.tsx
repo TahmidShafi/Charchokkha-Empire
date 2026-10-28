@@ -26,9 +26,10 @@ export default function App() {
 
   useEffect(() => {
     const backendUrl =
-      window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-        ? 'http://localhost:3001'
-        : window.location.origin;
+      import.meta.env.VITE_SERVER_URL ||
+      (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+        ? `${window.location.protocol}//${window.location.hostname}:3001`
+        : window.location.origin);
 
     const storedToken = localStorage.getItem('charchokkha_guest_token') || undefined;
 
