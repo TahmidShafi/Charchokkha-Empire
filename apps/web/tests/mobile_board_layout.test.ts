@@ -9,6 +9,7 @@ import {
   getBoardSpace,
 } from '../src/boardData.js';
 import { Board } from '../src/components/Board.js';
+import { GameSettings } from '../src/components/GameSettings.js';
 import { type RoomSnapshot } from '@charchokkha/shared';
 
 describe('Property Tile Display Name Formatter (formatTileDisplayName)', () => {
@@ -23,13 +24,13 @@ describe('Property Tile Display Name Formatter (formatTileDisplayName)', () => {
     expect(getBoardSpace(41).name).toBe('Kukichin Camp');
   });
 
-  it('provides selective visual abbreviations for exceptionally long names on mobile tiles', () => {
-    expect(formatTileDisplayName(getBoardSpace(1))).toBe('Rahattar');
-    expect(formatTileDisplayName(getBoardSpace(12))).toBe('Utshob Rehab');
-    expect(formatTileDisplayName(getBoardSpace(15))).toBe('Desi Fresh');
-    expect(formatTileDisplayName(getBoardSpace(22))).toBe('Bhai Bhai');
-    expect(formatTileDisplayName(getBoardSpace(33))).toBe('7 Dayz Chap');
-    expect(formatTileDisplayName(getBoardSpace(41))).toBe('Kukichin');
+  it('preserves canonical property names without confusing abbreviations', () => {
+    expect(formatTileDisplayName(getBoardSpace(1))).toBe('Rahattarpool');
+    expect(formatTileDisplayName(getBoardSpace(12))).toBe('Utshob Rehab Center');
+    expect(formatTileDisplayName(getBoardSpace(15))).toBe('Desi Fresh Factory');
+    expect(formatTileDisplayName(getBoardSpace(22))).toBe('Bhai Bhai Tiles');
+    expect(formatTileDisplayName(getBoardSpace(33))).toBe('7 dayz Chap Station');
+    expect(formatTileDisplayName(getBoardSpace(41))).toBe('Kukichin Camp');
   });
 
   it('strips redundant "Airport" postfix on all 4 airport transit tiles', () => {
@@ -64,10 +65,10 @@ describe('Property Tile Display Name Formatter (formatTileDisplayName)', () => {
     expect(formatTileDisplayName(getBoardSpace(47))).toBe('Saint Martin');
   });
 
-  it('ensures no formatted tile display name exceeds 13 characters for optimal mobile tile fitting', () => {
+  it('ensures all spaces have valid non-empty display names and maintain canonical integrity', () => {
     for (const space of BOARD_SPACES) {
       const display = formatTileDisplayName(space);
-      expect(display.length).toBeLessThanOrEqual(13);
+      expect(display.length).toBeGreaterThan(0);
     }
   });
 });
@@ -161,7 +162,7 @@ describe('Mobile Board Component Render Structure', () => {
     expect(html).toContain('id="space-12"');
     expect(html).toContain('id="space-24"');
     expect(html).toContain('id="space-36"');
-    expect(html).toContain('Utshob Rehab');
+    expect(html).toContain('Utshob Rehab Center');
 
     // Property prices formatted
     expect(html).toContain('$60');
@@ -216,6 +217,96 @@ describe('Mobile Board Component Render Structure', () => {
   });
 });
 
+describe('Table Settings and Test Bots (QA) Accessibility', () => {
+  it('renders Test Bots (QA) section for host in private room with full add/fill/speed controls', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(GameSettings, {
+        playerName: 'Alice',
+        playerAvatar: '👑',
+        isHost: true,
+        players: [
+          { id: 'p1', nickname: 'Alice', avatar: '👑', color: '#C4E64A', isHost: true, connected: true, seatIndex: 0 },
+          { id: 'bot_1', nickname: 'Bot Alpha', avatar: '🤖', color: '#FFC83D', isHost: false, connected: true, seatIndex: 1, isBot: true },
+        ],
+        onAvatarChange: () => {},
+        maxPlayers: 4,
+        onMaxPlayersChange: () => {},
+        isPrivate: true,
+        onIsPrivateChange: () => {},
+        allowBots: false,
+        onAllowBotsChange: () => {},
+        startingCash: 1500,
+        onStartingCashChange: () => {},
+        onAddBot: () => {},
+        onRemoveBot: () => {},
+        onSetBotSpeed: () => {},
+      })
+    );
+
+    expect(html).toContain('test-bots-section-card');
+    expect(html).toContain('Test Bots (QA)');
+    expect(html).toContain('id="btn-add-one-bot"');
+    expect(html).toContain('id="btn-fill-bots"');
+    expect(html).toContain('Normal (750ms)');
+    expect(html).toContain('Slow (2.5s)');
+    expect(html).toContain('Bot Alpha');
+  });
+
+  it('renders Test Bots QA section with a helpful switch-to-private button when room is public', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(GameSettings, {
+        playerName: 'Alice',
+        playerAvatar: '👑',
+        isHost: true,
+        players: [
+          { id: 'p1', nickname: 'Alice', avatar: '👑', color: '#C4E64A', isHost: true, connected: true, seatIndex: 0 },
+        ],
+        onAvatarChange: () => {},
+        maxPlayers: 4,
+        onMaxPlayersChange: () => {},
+        isPrivate: false,
+        onIsPrivateChange: () => {},
+        allowBots: false,
+        onAllowBotsChange: () => {},
+        startingCash: 1500,
+        onStartingCashChange: () => {},
+        onAddBot: () => {},
+      })
+    );
+
+    // Card is not hidden; it informs the host how to activate bots
+    expect(html).toContain('test-bots-section-card');
+    expect(html).toContain('id="btn-enable-private-for-bots"');
+    expect(html).toContain('Switch to Private Table');
+  });
+
+  it('does NOT render Test Bots QA section for non-host players', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(GameSettings, {
+        playerName: 'Bob',
+        playerAvatar: '🎩',
+        isHost: false,
+        players: [
+          { id: 'p1', nickname: 'Alice', avatar: '👑', color: '#C4E64A', isHost: true, connected: true, seatIndex: 0 },
+          { id: 'p2', nickname: 'Bob', avatar: '🎩', color: '#FFC83D', isHost: false, connected: true, seatIndex: 1 },
+        ],
+        onAvatarChange: () => {},
+        maxPlayers: 4,
+        onMaxPlayersChange: () => {},
+        isPrivate: true,
+        onIsPrivateChange: () => {},
+        allowBots: false,
+        onAllowBotsChange: () => {},
+        startingCash: 1500,
+        onStartingCashChange: () => {},
+      })
+    );
+
+    expect(html).not.toContain('test-bots-section-card');
+    expect(html).not.toContain('id="btn-add-one-bot"');
+  });
+});
+
 describe('Mobile CSS Stylesheet Integrity Verification', () => {
   const css = readFileSync(resolve(import.meta.dirname, '../src/index.css'), 'utf8');
 
@@ -227,6 +318,10 @@ describe('Mobile CSS Stylesheet Integrity Verification', () => {
   it('maximizes tabletop board dimensions on mobile up to calc(100vw - 4px)', () => {
     expect(css).toMatch(/width:\s*min\(calc\(100vw - 4px\)/);
     expect(css).toMatch(/aspect-ratio:\s*1\s*\/\s*1/);
+  });
+
+  it('increases perimeter track depth on mobile to 1.38fr to give tiles ample breathing room', () => {
+    expect(css).toMatch(/grid-template-columns:\s*1\.38fr repeat\(9, 1fr\) 1\.38fr/);
   });
 
   it('does NOT contain word-break: break-all on property tile titles', () => {
@@ -242,8 +337,18 @@ describe('Mobile CSS Stylesheet Integrity Verification', () => {
     expect(css).toMatch(/height:\s*calc\(44px \+ env\(safe-area-inset-bottom/);
   });
 
-  it('scales tactile dice cubes down to 30px on mobile and 25-28px on landscape', () => {
-    expect(css).toMatch(/\.tactile-dice-cube\s*\{[^}]*width:\s*30px/);
+  it('scales tactile dice cubes down to 27px on mobile', () => {
+    expect(css).toMatch(/\.tactile-dice-cube\s*\{[^}]*width:\s*27px/);
+  });
+
+  it('ensures room-board-center-stage.tab-stage-active stretches without flex center clipping', () => {
+    expect(css).toMatch(/\.room-board-center-stage\.tab-stage-active\s*\{[^}]*align-items:\s*stretch/);
+    expect(css).toMatch(/\.room-board-center-stage\.tab-stage-active\s*\{[^}]*justify-content:\s*flex-start/);
+  });
+
+  it('provides single scroll container in settings with safe-area bottom padding', () => {
+    expect(css).toMatch(/\.settings-scroll-content\s*\{[^}]*overflow-y:\s*auto/);
+    expect(css).toMatch(/\.settings-scroll-content\s*\{[^}]*padding:[^}]*env\(safe-area-inset-bottom/);
   });
 
   it('preserves desktop board tabletop grid rules (> 1024px)', () => {

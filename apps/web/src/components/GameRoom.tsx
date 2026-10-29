@@ -759,8 +759,8 @@ export function GameRoom({
           </aside>
         )}
 
-        {/* Center Stage: The 40-Space Board */}
-        <main className="room-board-center-stage">
+        {/* Center Stage: The 40-Space Board or Mobile Tab View */}
+        <main className={`room-board-center-stage ${activeMobileTab !== 'board' ? 'tab-stage-active' : ''}`}>
           {/* On Mobile: Switch between Board, Chat, and Settings tabs */}
           {activeMobileTab === 'board' && (
             <Board
