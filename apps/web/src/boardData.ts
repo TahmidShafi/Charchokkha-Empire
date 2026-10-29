@@ -15,14 +15,14 @@ export { getBoardSpace, TOTAL_SPACES };
  * Tuned for maximum contrast and distinctiveness on dark board surfaces.
  */
 export const PROPERTY_GROUP_COLORS: Record<PropertyGroup, string> = {
-  brown: '#a855f7',  // vibrant purple-brown (Salvador, Rio)
-  sky: '#0284c7',    // cyan/sky blue (Tel Aviv, Haifa, Jerusalem)
-  pink: '#ec4899',   // hot pink (Venice, Milan, Rome)
-  orange: '#f97316', // bright orange (Frankfurt, Munich, Berlin)
-  red: '#ef4444',    // vibrant red (Shenzhen, Beijing, Shanghai)
-  yellow: '#eab308', // gold yellow (Lyon, Toulouse, Paris)
-  green: '#10b981',  // emerald green (Liverpool, Manchester, London)
-  blue: '#3b82f6',   // royal blue (San Francisco, New York)
+  brown: '#a855f7',  // vibrant purple-brown (Rahattarpool, Chandgaon)
+  sky: '#0284c7',    // cyan/sky blue (Guaalpara, Mithagoli, Akborshah)
+  pink: '#ec4899',   // hot pink (Mern Sun, CGHS, Orchid)
+  orange: '#f97316', // bright orange (Muradpur, Oxygen, Nanupur)
+  red: '#ef4444',    // vibrant red (Uttara, Bashundhara, Aftabnagar)
+  yellow: '#eab308', // gold yellow (Mini Kashmir, Bashkhali, Ghuna)
+  green: '#10b981',  // emerald green (Bogalake, Thanchi, Tindu)
+  blue: '#3b82f6',   // royal blue (Lake Bilash, Saint Martin)
 };
 
 /**
@@ -41,41 +41,49 @@ export const SPACE_IDENTITY_BADGES: Record<number, SpaceIdentityBadge> = {
   2: { symbol: '💎', category: 'card', label: 'Treasure Chest' },
   3: { symbol: '🏖️', category: 'property', label: 'Coastal District' },
   4: { symbol: '⚖️', category: 'tax', label: 'Earnings Tax' },
-  5: { symbol: '✈️', category: 'transit', label: 'Airport Transit' },
-  6: { symbol: '🏙️', category: 'property', label: 'Commercial Hub' },
+  5: { symbol: '🏙️', category: 'property', label: 'Commercial Hub' },
+  6: { symbol: '✈️', category: 'transit', label: 'Airport Transit' },
   7: { symbol: '⚓', category: 'property', label: 'Harbor City' },
-  8: { symbol: '❓', category: 'card', label: 'Surprise Card' },
-  9: { symbol: '🏰', category: 'property', label: 'Heritage Quarter' },
-  10: { symbol: '⛓️', category: 'corner', label: 'Visiting Prison' },
-  11: { symbol: '🎭', category: 'property', label: 'Canal City' },
-  12: { symbol: '⚡', category: 'utility', label: 'Power Utility' },
-  13: { symbol: '🏛️', category: 'property', label: 'Design Capital' },
-  14: { symbol: '🏛️', category: 'property', label: 'Eternal District' },
-  15: { symbol: '✈️', category: 'transit', label: 'Airport Transit' },
-  16: { symbol: '🏢', category: 'property', label: 'Financial Center' },
-  17: { symbol: '💎', category: 'card', label: 'Treasure Chest' },
-  18: { symbol: '🍺', category: 'property', label: 'Bavarian Quarter' },
-  19: { symbol: '🏙️', category: 'property', label: 'Metropolis' },
-  20: { symbol: '🌴', category: 'corner', label: 'Vacation Retreat' },
-  21: { symbol: '💡', category: 'property', label: 'Tech Frontier' },
-  22: { symbol: '❓', category: 'card', label: 'Surprise Card' },
-  23: { symbol: '🏯', category: 'property', label: 'Imperial District' },
-  24: { symbol: '🌆', category: 'property', label: 'Skyline Hub' },
-  25: { symbol: '✈️', category: 'transit', label: 'Airport Transit' },
-  26: { symbol: '🍇', category: 'property', label: 'Culinary District' },
-  27: { symbol: '💧', category: 'utility', label: 'Water Utility' },
-  28: { symbol: '🚀', category: 'property', label: 'Aero Center' },
-  29: { symbol: '🎨', category: 'property', label: 'Boulevard Quarter' },
-  30: { symbol: '🚨', category: 'corner', label: 'Go to Prison' },
-  31: { symbol: '🎵', category: 'property', label: 'Waterfront Haven' },
-  32: { symbol: '🏭', category: 'property', label: 'Industrial Hub' },
-  33: { symbol: '💎', category: 'card', label: 'Treasure Chest' },
-  34: { symbol: '👑', category: 'property', label: 'Royal District' },
-  35: { symbol: '✈️', category: 'transit', label: 'Airport Transit' },
-  36: { symbol: '❓', category: 'card', label: 'Surprise Card' },
-  37: { symbol: '🌉', category: 'property', label: 'Bay Area' },
-  38: { symbol: '💎', category: 'tax', label: 'Premium Tax' },
-  39: { symbol: '🗽', category: 'property', label: 'Empire City' },
+  8: { symbol: '🏰', category: 'property', label: 'Heritage Quarter' },
+  9: { symbol: '❓', category: 'card', label: 'Surprise Card' },
+  10: { symbol: '🏘️', category: 'property', label: 'Bualkhali' },
+  11: { symbol: '🌲', category: 'property', label: 'Kaptai' },
+  12: { symbol: '🏥', category: 'corner', label: 'Utshob Rehab Center' },
+  13: { symbol: '🎭', category: 'property', label: 'Mern Sun' },
+  14: { symbol: '🏛️', category: 'property', label: 'Orkid' },
+  15: { symbol: '🐮', category: 'utility', label: 'Desi Fresh Factory' },
+  16: { symbol: '🏛️', category: 'property', label: 'CGHS' },
+  17: { symbol: '🌅', category: 'property', label: 'Sunny Dawn' },
+  18: { symbol: '✈️', category: 'transit', label: 'Airport Transit' },
+  19: { symbol: '🏢', category: 'property', label: 'Financial Center' },
+  20: { symbol: '💎', category: 'card', label: 'Treasure Chest' },
+  21: { symbol: '🍺', category: 'property', label: 'Oxygen' },
+  22: { symbol: '🧱', category: 'utility', label: 'Bhai Bhai Tiles' },
+  23: { symbol: '🏙️', category: 'property', label: 'Nanupur' },
+  24: { symbol: '🍔', category: 'corner', label: 'Abesh Boobesh' },
+  25: { symbol: '💡', category: 'property', label: 'Uttara' },
+  26: { symbol: '❓', category: 'card', label: 'Surprise Card' },
+  27: { symbol: '🏯', category: 'property', label: 'Bashundhara' },
+  28: { symbol: '💎', category: 'card', label: 'Treasure Chest' },
+  29: { symbol: '🌆', category: 'property', label: 'Aftabnagar' },
+  30: { symbol: '✈️', category: 'transit', label: 'Ansar Camp Airport' },
+  31: { symbol: '🛍️', category: 'property', label: 'Prem Bazar' },
+  32: { symbol: '🍇', category: 'property', label: 'Mini Kashmir' },
+  33: { symbol: '🍗', category: 'utility', label: '7 dayz Chap Station' },
+  34: { symbol: '🎨', category: 'property', label: 'Ghuna' },
+  35: { symbol: '🚀', category: 'property', label: 'Bashkhali' },
+  36: { symbol: '🚨', category: 'corner', label: 'Go to Rehab' },
+  37: { symbol: '🎵', category: 'property', label: 'Bogalake' },
+  38: { symbol: '🏭', category: 'property', label: 'Thanchi' },
+  39: { symbol: '💎', category: 'card', label: 'Treasure Chest' },
+  40: { symbol: '👑', category: 'property', label: 'Tindu' },
+  41: { symbol: '🏕️', category: 'property', label: 'Kukichin Camp' },
+  42: { symbol: '✈️', category: 'transit', label: 'Gudaraghat Airport' },
+  43: { symbol: '🏡', category: 'property', label: 'Gorbagudi' },
+  44: { symbol: '❓', category: 'card', label: 'Surprise Card' },
+  45: { symbol: '🌊', category: 'property', label: 'Lake Bilash' },
+  46: { symbol: '💎', category: 'tax', label: 'Premium Tax' },
+  47: { symbol: '🏝️', category: 'property', label: 'Saint Martin' },
 };
 
 /**

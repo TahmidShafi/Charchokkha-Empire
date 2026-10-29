@@ -47,27 +47,27 @@ import { BOARD_SPACES, PROPERTY_GROUP_COLORS, SPACE_IDENTITY_BADGES, getSpaceBad
 import { AVATAR_LIST } from '../src/components/LandingPage.js';
 
 describe('Tabletop Board Architecture Data', () => {
-  it('defines exactly 40 spaces on the perimeter', () => {
-    expect(BOARD_SPACES.length).toBe(40);
+  it('defines exactly 48 spaces on the perimeter', () => {
+    expect(BOARD_SPACES.length).toBe(48);
   });
 
   it('defines the 4 key corner stations', () => {
     expect(BOARD_SPACES[0].name).toBe('START');
     expect(BOARD_SPACES[0].type).toBe('corner');
 
-    expect(BOARD_SPACES[10].name).toBe('In Prison');
-    expect(BOARD_SPACES[10].type).toBe('corner');
+    expect(BOARD_SPACES[12].name).toBe('Utshob Rehab Center');
+    expect(BOARD_SPACES[12].type).toBe('corner');
 
-    expect(BOARD_SPACES[20].name).toBe('Vacation');
-    expect(BOARD_SPACES[20].type).toBe('corner');
+    expect(BOARD_SPACES[24].name).toBe('Abesh Boobesh');
+    expect(BOARD_SPACES[24].type).toBe('corner');
 
-    expect(BOARD_SPACES[30].name).toBe('Go to Prison');
-    expect(BOARD_SPACES[30].type).toBe('corner');
+    expect(BOARD_SPACES[36].name).toBe('Go to Rehab');
+    expect(BOARD_SPACES[36].type).toBe('corner');
   });
 
   it('verifies properties have prices and positive values', () => {
     const properties = BOARD_SPACES.filter((s) => s.type === 'property');
-    expect(properties.length).toBe(22);
+    expect(properties.length).toBe(28);
     for (const prop of properties) {
       expect(prop.price).toBeGreaterThan(0);
       expect(prop.rent).toBeGreaterThan(0);
@@ -83,11 +83,11 @@ describe('Tabletop Board Architecture Data', () => {
     }
   });
 
-  it('defines exactly 40 neutral identity badges without country flags', () => {
-    expect(Object.keys(SPACE_IDENTITY_BADGES).length).toBe(40);
+  it('defines exactly 48 neutral identity badges without country flags', () => {
+    expect(Object.keys(SPACE_IDENTITY_BADGES).length).toBe(48);
     // Standard regional flag Unicode range: \uD83C[\uDDE6-\uDDFF]
     const flagRegex = /[\uD83C][\uDDE6-\uDDFF]{2}/;
-    for (let i = 0; i < 40; i++) {
+    for (let i = 0; i < 48; i++) {
       const badge = getSpaceBadge(i);
       expect(badge.symbol).toBeTruthy();
       expect(flagRegex.test(badge.symbol)).toBe(false);

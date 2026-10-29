@@ -62,7 +62,7 @@ describe('Root CI Smoke Test — Built Shared Packages & Socket.IO Flow', () => 
     expect(getEngineInfo).toBeDefined();
     expect(rollSixSidedDie).toBeDefined();
     expect(rollDicePair).toBeDefined();
-    expect(CANONICAL_BOARD_SPACES).toHaveLength(40);
+    expect(CANONICAL_BOARD_SPACES).toHaveLength(48);
 
     const testState = createInitialGameState(['p1', 'p2'], 1500, 200);
     expect(testState.turnOrder).toEqual(['p1', 'p2']);

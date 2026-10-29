@@ -41,7 +41,7 @@ describe('Post-Match Results & Standings Frontend Verification Suite', () => {
       cash: 1200,
       isBankrupt: false,
       propertyCount: 3,
-      properties: [1, 3, 39],
+      properties: [1, 3, 43],
       stats: rawStats,
     };
     const parsedStanding = PlayerStandingSchema.safeParse(rawStanding);
@@ -53,9 +53,9 @@ describe('Post-Match Results & Standings Frontend Verification Suite', () => {
     state.phase = 'finished';
     state.winnerId = 'alice';
 
-    // Alice has cash 2000 and owns #39 New York (price 400)
+    // Alice has cash 2000 and owns #47 Saint Martin (price 400)
     state.players['alice'].cash = 2000;
-    state.properties[39] = { ownerId: 'alice', houses: 0, isMortgaged: false };
+    state.properties[47] = { ownerId: 'alice', houses: 0, isMortgaged: false };
 
     // Bob is active with cash 1000
     state.players['bob'].cash = 1000;
@@ -66,9 +66,9 @@ describe('Post-Match Results & Standings Frontend Verification Suite', () => {
     state.eliminationOrder = ['charlie'];
 
     const mockPlayers: Player[] = [
-      { id: 'alice', nickname: 'Alice', avatar: '👑', isHost: true, connected: true, seatIndex: 0 },
-      { id: 'bob', nickname: 'Bob', avatar: '🎩', isHost: false, connected: true, seatIndex: 1 },
-      { id: 'charlie', nickname: 'Charlie', avatar: '🐱', isHost: false, connected: true, seatIndex: 2 },
+      { id: 'alice', nickname: 'Alice', avatar: '👑', color: '#FFC83D', isHost: true, connected: true, seatIndex: 0 },
+      { id: 'bob', nickname: 'Bob', avatar: '🎩', color: '#559BD6', isHost: false, connected: true, seatIndex: 1 },
+      { id: 'charlie', nickname: 'Charlie', avatar: '🐱', color: '#FF8738', isHost: false, connected: true, seatIndex: 2 },
     ];
 
     const standings = calculateStandings(state, mockPlayers);
@@ -79,7 +79,7 @@ describe('Post-Match Results & Standings Frontend Verification Suite', () => {
     expect(standings[0].playerId).toBe('alice');
     expect(standings[0].nickname).toBe('Alice');
     expect(standings[0].netWorth).toBe(2400); // 2000 cash + 400 property
-    expect(standings[0].properties).toEqual([39]);
+    expect(standings[0].properties).toEqual([47]);
     expect(standings[0].propertyCount).toBe(1);
 
     // 2nd: Bob
@@ -116,8 +116,8 @@ describe('Post-Match Results & Standings Frontend Verification Suite', () => {
         mortgage: true,
       },
       players: [
-        { id: 'session_host', nickname: 'Host', avatar: '🟢', isHost: true, connected: true, seatIndex: 0 },
-        { id: 'session_guest', nickname: 'Guest', avatar: '🎩', isHost: false, connected: true, seatIndex: 1 },
+        { id: 'session_host', nickname: 'Host', avatar: '🟢', color: '#C4E64A', isHost: true, connected: true, seatIndex: 0 },
+        { id: 'session_guest', nickname: 'Guest', avatar: '🎩', color: '#559BD6', isHost: false, connected: true, seatIndex: 1 },
       ],
       gameState: undefined,
     };

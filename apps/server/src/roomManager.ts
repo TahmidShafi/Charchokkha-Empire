@@ -1,5 +1,6 @@
 import { randomBytes, randomInt, randomUUID } from 'node:crypto';
 import {
+  PLAYER_COLOR_HEXES,
   type GameState as SharedGameState,
   type Player,
   type RoomLifecycleState,
@@ -232,8 +233,20 @@ export class RoomManager {
     session: GuestSession,
     nickname: string,
     avatar: string = '🟢',
-    settings?: Partial<RoomSettings>
+    colorOrSettings?: string | Partial<RoomSettings>,
+    settingsOrUndefined?: Partial<RoomSettings>
   ): RoomSnapshot {
+    let color: string | undefined;
+    let settings: Partial<RoomSettings> | undefined;
+
+    if (typeof colorOrSettings === 'object' && colorOrSettings !== null) {
+      settings = colorOrSettings;
+      color = undefined;
+    } else {
+      color = typeof colorOrSettings === 'string' ? colorOrSettings : undefined;
+      settings = settingsOrUndefined;
+    }
+
     // Leave previous room if any
     if (session.currentRoomCode && this.rooms.has(session.currentRoomCode)) {
       this.leaveRoom(session, session.currentRoomCode);
@@ -242,6 +255,11 @@ export class RoomManager {
     const code = this.generateRoomCode();
     session.nickname = nickname.trim() || session.nickname;
     session.avatar = avatar || session.avatar;
+
+    const canonicalColor = color
+      ? PLAYER_COLOR_HEXES.find((c) => c.toLowerCase() === color.trim().toLowerCase())
+      : undefined;
+    const chosenColor = canonicalColor || PLAYER_COLOR_HEXES[0];
 
     const finalSettings: RoomSettings = {
       maxPlayers: Math.min(Math.max(settings?.maxPlayers ?? 4, 2), 8),
@@ -261,6 +279,7 @@ export class RoomManager {
       sessionId: session.sessionId,
       nickname: session.nickname,
       avatar: session.avatar,
+      color: chosenColor,
       isHost: true,
       connected: true,
       seatIndex: 0,
@@ -295,7 +314,8 @@ export class RoomManager {
     session: GuestSession,
     roomCode: string,
     nickname: string,
-    avatar: string = '🟢'
+    avatar: string = '🟢',
+    color?: string
   ): { snapshot: RoomSnapshot; isReconnect: boolean } {
     const code = roomCode.trim().toUpperCase();
     const room = this.rooms.get(code);
@@ -361,6 +381,31 @@ export class RoomManager {
       throw new Error('Room is at maximum capacity');
     }
 
+    const takenColors = new Set(
+      Array.from(room.players.values()).map((p) => p.color?.toLowerCase()).filter(Boolean)
+    );
+
+    if (takenColors.size >= PLAYER_COLOR_HEXES.length) {
+      throw new Error('All player colors are occupied in this room');
+    }
+
+    let chosenColor: string | undefined;
+    if (color) {
+      const canonical = PLAYER_COLOR_HEXES.find((c) => c.toLowerCase() === color.trim().toLowerCase());
+      if (!canonical) {
+        throw new Error(`Invalid player color: ${color}`);
+      }
+      if (takenColors.has(canonical.toLowerCase())) {
+        throw new Error('Selected color is already taken in this room');
+      }
+      chosenColor = canonical;
+    } else {
+      chosenColor = PLAYER_COLOR_HEXES.find((c) => !takenColors.has(c.toLowerCase()));
+      if (!chosenColor) {
+        throw new Error('All player colors are occupied in this room');
+      }
+    }
+
     // Find lowest available seat index
     const takenSeats = new Set(Array.from(room.players.values()).map((p) => p.seatIndex));
     let nextSeat = 0;
@@ -373,6 +418,7 @@ export class RoomManager {
       sessionId: session.sessionId,
       nickname: session.nickname,
       avatar: session.avatar,
+      color: chosenColor,
       isHost: false,
       connected: true,
       seatIndex: nextSeat,
@@ -562,6 +608,40 @@ export class RoomManager {
     }
 
     room.sequenceNumber += 1;
+    return this.toSnapshot(room);
+  }
+
+  /**
+   * Allows seated player to change their color while in waiting lobby.
+   */
+  public selectColor(session: GuestSession, roomCode: string, color: string): RoomSnapshot {
+    const code = roomCode.trim().toUpperCase();
+    const room = this.rooms.get(code);
+    if (!room) {
+      throw new Error(`Room not found: ${code}`);
+    }
+
+    const player = this.ensureSeatedPlayer(room, session);
+    if (room.state !== 'waiting') {
+      throw new Error('Cannot change color after the match has started');
+    }
+
+    const canonical = PLAYER_COLOR_HEXES.find((c) => c.toLowerCase() === color.trim().toLowerCase());
+    if (!canonical) {
+      throw new Error(`Invalid player color: ${color}`);
+    }
+
+    // Check if another player in this room already has this color
+    const conflict = Array.from(room.players.values()).find(
+      (p) => p.sessionId !== session.sessionId && p.color?.toLowerCase() === canonical.toLowerCase()
+    );
+    if (conflict) {
+      throw new Error('Selected color is already taken in this room');
+    }
+
+    player.color = canonical;
+    room.sequenceNumber += 1;
+    this.persistence.saveRoom(room, this.sessionsByToken);
     return this.toSnapshot(room);
   }
 
@@ -1107,6 +1187,7 @@ export class RoomManager {
       id: p.id,
       nickname: p.nickname,
       avatar: p.avatar,
+      color: p.color || PLAYER_COLOR_HEXES[p.seatIndex % 8],
       isHost: p.isHost,
       connected: p.connected,
       seatIndex: p.seatIndex,

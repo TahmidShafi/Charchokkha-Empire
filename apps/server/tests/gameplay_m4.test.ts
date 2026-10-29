@@ -240,7 +240,7 @@ describe('Milestone 4 — Core Gameplay Server Integration Suite', () => {
     serverRoom.gameState!.currentTurnIndex = 0;
     serverRoom.gameState!.turnPhase = 'need_roll';
     serverRoom.gameState!.players[client1Auth.sessionId].inPrison = true;
-    serverRoom.gameState!.players[client1Auth.sessionId].position = 10;
+    serverRoom.gameState!.players[client1Auth.sessionId].position = 12;
     const initialCash = serverRoom.gameState!.players[client1Auth.sessionId].cash;
 
     const fineAck = await new Promise<SocketAck<RoomSnapshot>>((resolve) => {

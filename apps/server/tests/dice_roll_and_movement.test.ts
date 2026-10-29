@@ -106,10 +106,10 @@ describe('Server Authoritative Dice Roll and Movement Synchronization Suite', ()
     expect(diceRoll!.total).toBeGreaterThanOrEqual(2);
     expect(diceRoll!.total).toBeLessThanOrEqual(12);
 
-    const expectedNewPos = diceRoll!.total % 40;
+    const expectedNewPos = diceRoll!.total % 48;
     const actualNewPos = rollSnapshot.gameState?.players[activeId].position;
     // Note: Space 8 is a Chance card space whose first card is "Advance to START" (Space 0)
-    if (expectedNewPos === 8) {
+    if (expectedNewPos === 9) {
       expect(actualNewPos).toBe(0);
     } else {
       expect(actualNewPos).toBe(expectedNewPos);
@@ -131,7 +131,7 @@ describe('Server Authoritative Dice Roll and Movement Synchronization Suite', ()
     expect(dupRollAck.ok).toBe(true);
     if (dupRollAck.ok) {
       expect(dupRollAck.data.sequenceNumber).toBe(rollSnapshot.sequenceNumber);
-      expect(dupRollAck.data.gameState?.players[activeId].position).toBe(expectedNewPos);
+      expect(dupRollAck.data.gameState?.players[activeId].position).toBe(actualNewPos);
       expect(dupRollAck.data.gameState?.lastDiceRoll).toEqual(diceRoll);
     }
 

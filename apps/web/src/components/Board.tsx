@@ -1,13 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
 import {
   BOARD_SPACES,
-  PROPERTY_GROUP_COLORS,
   getSpaceBadge,
   type BoardSpace,
 } from '../boardData';
 import { getBoardSpace, getGroupSpaces, hasColorMonopoly } from '@charchokkha/game-engine';
 import { type Player, type PropertyRecord, type RoomSnapshot } from '@charchokkha/shared';
 import { soundManager } from '../audio/soundManager';
+import { PlayerCharacter } from './PlayerCharacter';
 import { calculateStepPath, prefersReducedMotion } from '../utils/tokenMovement';
 
 export interface BoardProps {
@@ -187,7 +187,7 @@ export function Board({
       if (path.length === 1) {
         updatePosition(p.id, targetPos);
         setIsTokenMoving(false);
-        if (targetPos === 10) {
+        if (targetPos === 12) {
           soundManager.playGoToPrison();
         }
         return;
@@ -210,7 +210,7 @@ export function Board({
             delete movementIntervalsRef.current[p.id];
             updatePosition(p.id, targetPos);
             setIsTokenMoving(false);
-            if (targetPos === 10 && gameState?.players[p.id]?.inPrison) {
+            if (targetPos === 12 && gameState?.players[p.id]?.inPrison) {
               soundManager.playGoToPrison();
             }
           }
@@ -250,7 +250,7 @@ export function Board({
       let eventType: 'purchase' | 'rent' | 'prison' | 'auction' | 'trade' | 'victory' | null = null;
 
       if (currentActionMsg.startsWith('Purchased')) {
-        eventType = 'purchase';
+        // Audio feedback on purchase, without redundant visual pop-up banner
         soundManager.playBuyProperty();
       } else if (currentActionMsg.includes('Paid $') && currentActionMsg.includes('rent')) {
         eventType = 'rent';
@@ -293,6 +293,7 @@ export function Board({
       id: p.id,
       nickname: p.nickname,
       avatar: p.avatar,
+      color: p.color || '#C4E64A',
       position: currentRenderPos,
       cash: pState ? pState.cash : roomSnapshot.settings.startingCash,
       isBankrupt: pState ? pState.isBankrupt : false,
@@ -321,18 +322,18 @@ export function Board({
     return raw as PropertyRecord;
   };
 
-  // 11x11 Grid mapping for 40 perimeter spaces
+  // 11x11 Grid mapping for 48 perimeter spaces (top, right, bottom, and left edges each have 11 spaces)
   const getSpaceGridCoords = (
     id: number
   ): { gridRow: number; gridColumn: number; edge: 'top' | 'right' | 'bottom' | 'left' | 'corner' } => {
     if (id === 0) return { gridRow: 1, gridColumn: 1, edge: 'corner' };
-    if (id >= 1 && id <= 9) return { gridRow: 1, gridColumn: id + 1, edge: 'top' };
-    if (id === 10) return { gridRow: 1, gridColumn: 11, edge: 'corner' };
-    if (id >= 11 && id <= 19) return { gridRow: id - 9, gridColumn: 11, edge: 'right' };
-    if (id === 20) return { gridRow: 11, gridColumn: 11, edge: 'corner' };
-    if (id >= 21 && id <= 29) return { gridRow: 11, gridColumn: 31 - id, edge: 'bottom' };
-    if (id === 30) return { gridRow: 11, gridColumn: 1, edge: 'corner' };
-    return { gridRow: 41 - id, gridColumn: 1, edge: 'left' };
+    if (id >= 1 && id <= 11) return { gridRow: 1, gridColumn: id + 1, edge: 'top' };
+    if (id === 12) return { gridRow: 1, gridColumn: 11, edge: 'corner' };
+    if (id >= 13 && id <= 23) return { gridRow: 0, gridColumn: 11, edge: 'right' };
+    if (id === 24) return { gridRow: 11, gridColumn: 11, edge: 'corner' };
+    if (id >= 25 && id <= 35) return { gridRow: 11, gridColumn: 36 - id, edge: 'bottom' };
+    if (id === 36) return { gridRow: 11, gridColumn: 1, edge: 'corner' };
+    return { gridRow: 0, gridColumn: 1, edge: 'left' };
   };
 
   const renderDiePips = (val: number) => {
@@ -370,6 +371,7 @@ export function Board({
 
   const selectedSpace: BoardSpace | null = selectedSpaceId != null ? getBoardSpace(selectedSpaceId) : null;
   const selectedPropRecord = selectedSpaceId != null ? getPropertyInfo(selectedSpaceId) : undefined;
+  const selectedOwner = selectedPropRecord ? roomSnapshot.players.find((p) => p.id === selectedPropRecord.ownerId) : undefined;
   const isSelectedOwnedByMe = selectedPropRecord?.ownerId === currentSessionId;
 
   // Monopoly & House calculations for selected property
@@ -405,168 +407,253 @@ export function Board({
 
   const otherPlayers = roomSnapshot.players.filter((p: Player) => p.id !== currentSessionId);
 
+  const renderTile = (space: BoardSpace, isInsideTrack = false) => {
+    const coords = getSpaceGridCoords(space.id);
+    const isCorner = coords.edge === 'corner';
+    const tokensOnTile = playersWithTokens.filter((p) => p.position === space.id);
+    const badge = getSpaceBadge(space.id);
+
+    const propRecord = getPropertyInfo(space.id);
+    const ownerPlayer = propRecord
+      ? roomSnapshot.players.find((p: Player) => p.id === propRecord.ownerId)
+      : undefined;
+
+    // Corner presentation
+    if (isCorner) {
+      let cornerIcon = '🏁';
+      let cornerModifier = 'corner-start';
+      if (space.id === 12) {
+        cornerIcon = '';
+        cornerModifier = 'corner-prison';
+      } else if (space.id === 24) {
+        cornerIcon = '🍔';
+        cornerModifier = 'corner-vacation';
+      } else if (space.id === 36) {
+        cornerIcon = '🚨';
+        cornerModifier = 'corner-arrest';
+      }
+
+      return (
+        <div
+          key={space.id}
+          id={`space-${space.id}`}
+          className={`board-tile tile-corner ${cornerModifier}`}
+          style={{ gridRow: coords.gridRow, gridColumn: coords.gridColumn }}
+          tabIndex={0}
+          role="button"
+          aria-label={space.subtext ? `${space.name} (${space.subtext})` : space.name}
+          onClick={() => setSelectedSpaceId(space.id)}
+        >
+          <div className="corner-content-box">
+            {cornerIcon ? <span className="corner-icon-symbol" aria-hidden="true">{cornerIcon}</span> : null}
+            <span className="corner-primary-label">{space.name}</span>
+            {space.subtext ? <span className="corner-sub-caption">{space.subtext}</span> : null}
+          </div>
+
+          {tokensOnTile.length > 0 && (
+            <div className="tile-tokens-cluster">
+              {tokensOnTile.map((p) => (
+                <div
+                  key={p.id}
+                  className={`player-board-token ${p.id === currentSessionId ? 'token-is-me' : ''}`}
+                  title={`${p.nickname} (${p.cash})`}
+                  aria-label={`${p.nickname} token`}
+                >
+                  <PlayerCharacter
+                    color={p.color || '#C4E64A'}
+                    size={22}
+                    isHopping={isTokenMoving && p.id === activePlayerId}
+                    showGlow={p.id === currentSessionId}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    const inwardPositionClass = `inward-edge-${coords.edge}`;
+    const isAirport = space.type === 'airport';
+    const tileDisplayName = isAirport
+      ? space.name.replace(/\s*airport\s*/i, '').trim()
+      : space.name;
+
+    const tileStyle: React.CSSProperties = {
+      ...(isInsideTrack
+        ? {}
+        : { gridRow: coords.gridRow, gridColumn: coords.gridColumn }),
+      ...(ownerPlayer
+        ? {
+            borderColor: `${ownerPlayer.color}66`,
+            boxShadow: `inset 0 0 6px ${ownerPlayer.color}26`,
+          }
+        : {}),
+    };
+
+    return (
+      <div
+        key={space.id}
+        id={`space-${space.id}`}
+        className={`board-tile tile-edge ${inwardPositionClass} ${coords.edge === 'top' || coords.edge === 'bottom' ? 'tile-edge-vertical' : 'tile-edge-horizontal'} ${propRecord?.isMortgaged ? 'tile-is-mortgaged' : ''} ${isAirport ? 'tile-type-airport' : ''}`}
+        style={tileStyle}
+        tabIndex={0}
+        role="button"
+        aria-label={`${space.name}, Price: ${space.price ?? 0}`}
+        onClick={() => setSelectedSpaceId(space.id)}
+      >
+        {/* Ownership Strip: renders ONLY when the property is owned, matching the owner's player color */}
+        {ownerPlayer && (
+          <div
+            className="tile-color-strip tile-ownership-strip"
+            style={{
+              backgroundColor: ownerPlayer.color,
+              boxShadow: `0 0 8px ${ownerPlayer.color}88`,
+            }}
+            aria-hidden="true"
+          />
+        )}
+
+        {/* Building indicators (Houses / Hotel) */}
+        {propRecord && propRecord.houses > 0 && (
+          <div className="tile-improvements-strip">
+            {propRecord.houses === 5 ? (
+              <span className="hotel-improvement-chip" title="Hotel">
+                🏨 Hotel
+              </span>
+            ) : (
+              <div className="houses-pips-row" title={`${propRecord.houses} House(s)`}>
+                {Array.from({ length: propRecord.houses }).map((_, i) => (
+                  <span key={i} className="house-pip-dot" />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Mortgaged Hatch Overlay */}
+        {propRecord?.isMortgaged && (
+          <div className="tile-mortgage-overlay">
+            <span className="mortgage-stamp">MORTGAGE</span>
+          </div>
+        )}
+
+        {/* Tile Core Content */}
+        <div className="tile-body-box">
+          {/* Neutral category emblem badge (NO country flags) */}
+          {space.type !== 'property' && badge?.symbol ? (
+            <span className="tile-category-badge" title={badge.label} aria-hidden="true">
+              {badge.symbol}
+            </span>
+          ) : null}
+
+          <span className={`tile-title-text ${isAirport ? 'tile-airport-name' : ''}`}>{tileDisplayName}</span>
+
+          {space.price != null ? (
+            <span className="tile-price-tag">${space.price}</span>
+          ) : (
+            space.subtext && <span className="tile-subtext-tag">{space.subtext}</span>
+          )}
+        </div>
+
+        {/* Player Tokens Cluster */}
+        {tokensOnTile.length > 0 && (
+          <div className="tile-tokens-cluster">
+            {tokensOnTile.map((p) => (
+              <div
+                key={p.id}
+                className={`player-board-token ${p.id === currentSessionId ? 'token-is-me' : ''}`}
+                title={`${p.nickname} (${p.cash})`}
+                aria-label={`${p.nickname} token`}
+              >
+                <PlayerCharacter
+                  color={p.color || '#C4E64A'}
+                  size={22}
+                  isHopping={isTokenMoving && p.id === activePlayerId}
+                  showGlow={p.id === currentSessionId}
+                />
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="board-outer-wrapper">
       <div className="board-grid-tabletop" role="region" aria-label="Game Board">
-        {/* Render 40 Canonical Spaces */}
-        {BOARD_SPACES.map((space) => {
-          const coords = getSpaceGridCoords(space.id);
-          const isCorner = coords.edge === 'corner';
-          const groupColor = space.group ? PROPERTY_GROUP_COLORS[space.group] : undefined;
-          const tokensOnTile = playersWithTokens.filter((p) => p.position === space.id);
-          const badge = getSpaceBadge(space.id);
+        {/* Corner 0: START */}
+        {renderTile(BOARD_SPACES[0])}
 
-          const propRecord = getPropertyInfo(space.id);
-          const ownerPlayer = propRecord
-            ? roomSnapshot.players.find((p: Player) => p.id === propRecord.ownerId)
-            : undefined;
+        {/* Top Edge Track: 11 spaces from Rahattarpool (1) to Kaptai (11) */}
+        <div
+          className="board-top-edge-track"
+          style={{
+            gridRow: 1,
+            gridColumn: '2 / 11',
+            display: 'grid',
+            gridTemplateColumns: 'repeat(11, 1fr)',
+            height: '100%',
+            width: '100%',
+          }}
+        >
+          {BOARD_SPACES.slice(1, 12).map((space) => renderTile(space, true))}
+        </div>
 
-          // Corner presentation
-          if (isCorner) {
-            let cornerIcon = '🏁';
-            let cornerModifier = 'corner-start';
-            if (space.id === 10) {
-              cornerIcon = '⛓️';
-              cornerModifier = 'corner-prison';
-            } else if (space.id === 20) {
-              cornerIcon = '🌴';
-              cornerModifier = 'corner-vacation';
-            } else if (space.id === 30) {
-              cornerIcon = '🚨';
-              cornerModifier = 'corner-arrest';
-            }
+        {/* Corner 12: Utshob Rehab Center */}
+        {renderTile(BOARD_SPACES[12])}
 
-            return (
-              <div
-                key={space.id}
-                id={`space-${space.id}`}
-                className={`board-tile tile-corner ${cornerModifier}`}
-                style={{ gridRow: coords.gridRow, gridColumn: coords.gridColumn }}
-                tabIndex={0}
-                role="button"
-                aria-label={`${space.name} (${space.subtext || ''})`}
-                onClick={() => setSelectedSpaceId(space.id)}
-              >
-                <div className="corner-content-box">
-                  <span className="corner-icon-symbol" aria-hidden="true">{cornerIcon}</span>
-                  <span className="corner-primary-label">{space.name}</span>
-                  <span className="corner-sub-caption">{space.subtext}</span>
-                </div>
+        {/* Right Edge Track: 11 spaces from Mern Sun (13) to Nanupur (23) */}
+        <div
+          className="board-right-edge-track"
+          style={{
+            gridRow: '2 / 11',
+            gridColumn: 11,
+            display: 'grid',
+            gridTemplateRows: 'repeat(11, 1fr)',
+            height: '100%',
+            width: '100%',
+          }}
+        >
+          {BOARD_SPACES.slice(13, 24).map((space) => renderTile(space, true))}
+        </div>
 
-                {tokensOnTile.length > 0 && (
-                  <div className="tile-tokens-cluster">
-                    {tokensOnTile.map((p) => (
-                      <div
-                        key={p.id}
-                        className={`player-board-token ${p.id === currentSessionId ? 'token-is-me' : ''}`}
-                        title={`${p.nickname} ($${p.cash})`}
-                        aria-label={`${p.nickname} token`}
-                      >
-                        {p.avatar}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            );
-          }
+        {/* Corner 24: Abesh Boobesh */}
+        {renderTile(BOARD_SPACES[24])}
 
-          // Inward-facing color bar placement:
-          // Top edge: color bar on bottom
-          // Right edge: color bar on left
-          // Bottom edge: color bar on top
-          // Left edge: color bar on right
-          const inwardPositionClass = `inward-edge-${coords.edge}`;
+        {/* Bottom Edge Track: 11 spaces from Uttara (25) to Bashkhali (35) */}
+        <div
+          className="board-bottom-edge-track"
+          style={{
+            gridRow: 11,
+            gridColumn: '2 / 11',
+            display: 'grid',
+            gridTemplateColumns: 'repeat(11, 1fr)',
+            height: '100%',
+            width: '100%',
+          }}
+        >
+          {[...BOARD_SPACES.slice(25, 36)].reverse().map((space) => renderTile(space, true))}
+        </div>
 
-          return (
-            <div
-              key={space.id}
-              id={`space-${space.id}`}
-              className={`board-tile tile-edge ${inwardPositionClass} ${propRecord?.isMortgaged ? 'tile-is-mortgaged' : ''}`}
-              style={{ gridRow: coords.gridRow, gridColumn: coords.gridColumn }}
-              tabIndex={0}
-              role="button"
-              aria-label={`${space.name}, Price: $${space.price ?? 0}`}
-              onClick={() => setSelectedSpaceId(space.id)}
-            >
-              {/* Inward-facing color strip */}
-              {groupColor && (
-                <div
-                  className="tile-color-strip"
-                  style={{ backgroundColor: groupColor }}
-                  aria-hidden="true"
-                />
-              )}
+        {/* Corner 36: Go to Rehab */}
+        {renderTile(BOARD_SPACES[36])}
 
-              {/* Building indicators (Houses / Hotel) */}
-              {propRecord && propRecord.houses > 0 && (
-                <div className="tile-improvements-strip">
-                  {propRecord.houses === 5 ? (
-                    <span className="hotel-improvement-chip" title="Hotel">
-                      🏨 Hotel
-                    </span>
-                  ) : (
-                    <div className="houses-pips-row" title={`${propRecord.houses} House(s)`}>
-                      {Array.from({ length: propRecord.houses }).map((_, i) => (
-                        <span key={i} className="house-pip-dot" />
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Mortgaged Hatch Overlay */}
-              {propRecord?.isMortgaged && (
-                <div className="tile-mortgage-overlay">
-                  <span className="mortgage-stamp">MORTGAGE</span>
-                </div>
-              )}
-
-              {/* Tile Core Content */}
-              <div className="tile-body-box">
-                {/* Neutral category emblem badge (NO country flags) */}
-                <span className="tile-category-badge" title={badge.label} aria-hidden="true">
-                  {badge.symbol}
-                </span>
-
-                <span className="tile-title-text">{space.name}</span>
-
-                {space.price != null ? (
-                  <span className="tile-price-tag">${space.price}</span>
-                ) : (
-                  space.subtext && <span className="tile-subtext-tag">{space.subtext}</span>
-                )}
-              </div>
-
-              {/* Owner Chip */}
-              {ownerPlayer && (
-                <div
-                  className="tile-ownership-chip"
-                  title={`Owned by ${ownerPlayer.nickname}`}
-                >
-                  <span className="owner-crown-icon" aria-hidden="true">👑</span>
-                  <span className="owner-name-abbr">{ownerPlayer.nickname.slice(0, 4)}</span>
-                </div>
-              )}
-
-              {/* Player Tokens Cluster */}
-              {tokensOnTile.length > 0 && (
-                <div className="tile-tokens-cluster">
-                  {tokensOnTile.map((p) => (
-                    <div
-                      key={p.id}
-                      className={`player-board-token ${p.id === currentSessionId ? 'token-is-me' : ''}`}
-                      title={`${p.nickname} ($${p.cash})`}
-                      aria-label={`${p.nickname} token`}
-                    >
-                      {p.avatar}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          );
-        })}
+        {/* Left Edge: Remaining Spaces 37 to 45 (Bogalake to Saint Martin) */}
+        <div
+          className="board-left-edge-track"
+          style={{
+            gridRow: '2 / 11',
+            gridColumn: 1,
+            display: 'grid',
+            gridTemplateRows: 'repeat(11, 1fr)',
+            height: '100%',
+            width: '100%',
+          }}
+        >
+          {[...BOARD_SPACES.slice(37, 48)].reverse().map((space) => renderTile(space, true))}
+        </div>
 
         {/* Central Courtyard Stage */}
         <div className="board-courtyard-center">
@@ -908,8 +995,8 @@ export function Board({
             </div>
           )}
 
-          {/* Action Log Message Ticker */}
-          {gameState?.lastActionMessage && (
+          {/* Action Log Message Ticker (suppress duplicate purchase message) */}
+          {gameState?.lastActionMessage && !gameState.lastActionMessage.startsWith('Purchased') && (
             <div className="courtyard-action-ticker" aria-live="polite">
               <span className="ticker-dot" aria-hidden="true">•</span>
               <span className="ticker-text">{gameState.lastActionMessage}</span>
@@ -932,15 +1019,28 @@ export function Board({
           <div className="dialog-card-surface prop-inspector-card" onClick={(e) => e.stopPropagation()}>
             <div className="dialog-header-row">
               <div className="prop-inspector-title-group">
-                {selectedSpace.group && (
+                {selectedOwner && (
                   <span
                     className="prop-group-dot"
-                    style={{ backgroundColor: PROPERTY_GROUP_COLORS[selectedSpace.group] }}
+                    style={{
+                      backgroundColor: selectedOwner.color,
+                      boxShadow: `0 0 8px ${selectedOwner.color}88`,
+                    }}
                     aria-hidden="true"
                   />
                 )}
+                {selectedSpace.type === 'airport' && (
+                  <span className="prop-group-dot prop-group-dot-airport" aria-hidden="true">✈️</span>
+                )}
+                {selectedSpace.type === 'utility' && (
+                  <span className="prop-group-dot prop-group-dot-airport" aria-hidden="true">
+                    {selectedSpace.name.includes('Desi') ? '🐮' : selectedSpace.name.includes('Bhai') ? '🧱' : '🍗'}
+                  </span>
+                )}
                 <h2 id="prop-modal-title" className="dialog-title-text">
-                  {selectedSpace.name}
+                  {selectedSpace.type === 'airport'
+                    ? `${selectedSpace.name.replace(/\s*airport\s*/i, '').trim()} Airport`
+                    : selectedSpace.name}
                 </h2>
                 {isSpectator && (
                   <span className="prop-spectator-chip">👁️ Spectating</span>
@@ -964,12 +1064,15 @@ export function Board({
 
               <div className="prop-stat-box">
                 <span className="stat-label">Ownership</span>
-                <span className="stat-val">
-                  {selectedPropRecord
-                    ? `${roomSnapshot.players.find((p) => p.id === selectedPropRecord.ownerId)?.nickname ?? 'Player'} ${
-                        selectedPropRecord.isMortgaged ? '(Mortgaged)' : ''
-                      }`
-                    : 'Unowned'}
+                <span className="stat-val" style={selectedOwner ? { color: selectedOwner.color } : {}}>
+                  {selectedOwner ? (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
+                      <PlayerCharacter color={selectedOwner.color} size={16} />
+                      {selectedOwner.nickname} {selectedPropRecord?.isMortgaged ? '(Mortgaged)' : ''}
+                    </span>
+                  ) : (
+                    'Unowned'
+                  )}
                 </span>
               </div>
             </div>
@@ -1002,6 +1105,42 @@ export function Board({
                     Improvement Cost: ${selectedSpace.houseCost} per House / Hotel
                   </div>
                 )}
+              </div>
+            )}
+
+            {selectedSpace.type === 'airport' && (
+              <div className="prop-rent-schedule-card">
+                <div className="rent-schedule-header">✈️ Airport Transit Rent</div>
+                <div className="rent-tiers-grid">
+                  <div className="rent-tier-item">
+                    <span>1 Airport Owned:</span> <strong className="font-mono">$25</strong>
+                  </div>
+                  <div className="rent-tier-item">
+                    <span>2 Airports Owned:</span> <strong className="font-mono">$50</strong>
+                  </div>
+                  <div className="rent-tier-item">
+                    <span>3 Airports Owned:</span> <strong className="font-mono">$100</strong>
+                  </div>
+                  <div className="rent-tier-item rent-tier-hotel">
+                    <span>All 4 Airports Owned:</span> <strong className="font-mono">$200</strong>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {selectedSpace.type === 'utility' && (
+              <div className="prop-rent-schedule-card">
+                <div className="rent-schedule-header">
+                  {selectedSpace.name.includes('Desi') ? '🐮' : selectedSpace.name.includes('Bhai') ? '🧱' : '🍗'} Utility Rent Multiplier
+                </div>
+                <div className="rent-tiers-grid">
+                  <div className="rent-tier-item">
+                    <span>1 Utility Owned:</span> <strong className="font-mono">4× Dice Roll</strong>
+                  </div>
+                  <div className="rent-tier-item rent-tier-hotel">
+                    <span>2+ Utilities Owned:</span> <strong className="font-mono">10× Dice Roll</strong>
+                  </div>
+                </div>
               </div>
             )}
 

@@ -6,6 +6,7 @@ import {
   GetSnapshotPayloadSchema,
   HealthCheckResponseSchema,
   JoinRoomPayloadSchema,
+  SelectColorPayloadSchema,
   SpectateRoomPayloadSchema,
   LeaveRoomPayloadSchema,
   PingPayloadSchema,
@@ -209,6 +210,7 @@ export function createAppServer(options: ServerOptions = {}) {
             session,
             parsed.data.nickname,
             parsed.data.avatar,
+            parsed.data.color,
             parsed.data.settings
           );
 
@@ -278,7 +280,8 @@ export function createAppServer(options: ServerOptions = {}) {
               session,
               roomCode,
               parsed.data.nickname,
-              parsed.data.avatar
+              parsed.data.avatar,
+              parsed.data.color
             );
           });
 
@@ -308,6 +311,52 @@ export function createAppServer(options: ServerOptions = {}) {
           const msg = error instanceof Error ? error.message : 'Failed to join room';
           const code = msg.includes('capacity') ? 'ROOM_FULL' : 'ROOM_JOIN_FAILED';
           const err: SocketError = { code, message: msg };
+          if (typeof ack === 'function') ack({ ok: false, error: err });
+        }
+      }
+    );
+
+    // --- Room: Select Color ---
+    socket.on(
+      SOCKET_EVENTS.ROOM_SELECT_COLOR,
+      async (rawPayload: unknown, ack?: (response: SocketAck<RoomSnapshot>) => void) => {
+        const parsed = SelectColorPayloadSchema.safeParse(rawPayload);
+        if (!parsed.success) {
+          const err: SocketError = {
+            code: 'INVALID_PAYLOAD',
+            message: 'Validation failed: ' + parsed.error.issues.map((i) => i.message).join(', '),
+            details: parsed.error.flatten(),
+          };
+          if (typeof ack === 'function') ack({ ok: false, error: err });
+          return;
+        }
+
+        const roomCode = parsed.data.roomCode.trim().toUpperCase();
+        try {
+          const room = roomManager.getRoom(roomCode);
+          if (!room) {
+            const err: SocketError = { code: 'ROOM_NOT_FOUND', message: `Room ${roomCode} does not exist` };
+            if (typeof ack === 'function') ack({ ok: false, error: err });
+            return;
+          }
+
+          const { result: snapshot } = await roomManager.enqueueRoomAction(
+            roomCode,
+            () => {
+              return roomManager.selectColor(session, roomCode, parsed.data.color);
+            },
+            parsed.data.requestId
+          );
+
+          if (typeof ack === 'function') {
+            ack({ ok: true, data: snapshot });
+          }
+
+          socket.emit(SOCKET_EVENTS.ROOM_SNAPSHOT, snapshot);
+          io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.ROOM_UPDATED, snapshot);
+        } catch (error: unknown) {
+          const msg = error instanceof Error ? error.message : 'Failed to select color';
+          const err: SocketError = { code: 'COLOR_SELECTION_FAILED', message: msg };
           if (typeof ack === 'function') ack({ ok: false, error: err });
         }
       }

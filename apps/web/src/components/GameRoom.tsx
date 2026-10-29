@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { Board } from './Board';
+import { PlayerCharacter } from './PlayerCharacter';
 import { ChatPanel, type ChatMessage } from './ChatPanel';
 import { GameSettings } from './GameSettings';
 import { PostMatchResults } from './PostMatchResults';
@@ -116,6 +117,18 @@ export function GameRoom({
         avatar: AVATAR_OPTIONS[nextIdx],
       });
     }
+  };
+
+  const handleSelectColor = (color: string) => {
+    if (!socket || isSpectator || roomSnapshot.state !== 'waiting') return;
+    const reqId = getOrCreateRequestId('select_color');
+    socket.emit(
+      SOCKET_EVENTS.ROOM_SELECT_COLOR,
+      { roomCode, color, requestId: reqId },
+      () => {
+        clearRequestId('select_color');
+      }
+    );
   };
 
   const handleUpdateMaxPlayers = (maxPlayers: number) => {
@@ -647,7 +660,7 @@ export function GameRoom({
                 className={`player-roster-card ${isTurn ? 'card-is-active-turn' : ''} ${isMe ? 'card-is-self' : ''}`}
               >
                 <div className="player-roster-avatar-wrap">
-                  <span className="player-avatar-icon">{p.avatar || '🟢'}</span>
+                  <PlayerCharacter color={p.color || '#C4E64A'} size={28} showGlow={isMe} />
                   {p.isHost && (
                     <span className="player-host-crown" title="Room Host">👑</span>
                   )}
@@ -740,6 +753,8 @@ export function GameRoom({
               <GameSettings
                 playerName={playerName}
                 playerAvatar={currentAvatar}
+                playerColor={currentPlayer?.color || '#C4E64A'}
+                onColorChange={handleSelectColor}
                 isHost={isHost}
                 isSpectator={isSpectator}
                 players={roomSnapshot.players}

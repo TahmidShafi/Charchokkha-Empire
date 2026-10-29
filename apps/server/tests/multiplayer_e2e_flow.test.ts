@@ -202,9 +202,9 @@ describe('Step 4 — Real Multiplayer E2E Integration Flow Suite', () => {
     const bobCashBeforeRent = serverRoom.gameState!.players[playerB.session.sessionId].cash;
     const aliceCashBeforeRent = serverRoom.gameState!.players[playerA.session.sessionId].cash;
 
-    serverRoom.gameState!.players[playerB.session.sessionId].position = 39;
+    serverRoom.gameState!.players[playerB.session.sessionId].position = 47;
 
-    // Bob rolls dice (injected [1, 1] = total 2, 39 + 2 = 41 % 40 = space 1)
+    // Bob rolls dice (injected [1, 1] = total 2, 47 + 2 = 49 % 48 = space 1)
     const bobRentRoll = appServer.roomManager.rollDice(
       playerB.session as any,
       roomCode,

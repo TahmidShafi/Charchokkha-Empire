@@ -28,6 +28,72 @@ export default function App() {
   const lastSequenceRef = useRef<number>(0);
 
   useEffect(() => {
+    if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('mock') === '1') {
+      const mockSnap: RoomSnapshot = {
+        code: 'TABLE1',
+        hostId: 'p1',
+        state: 'in_progress',
+        sequenceNumber: 10,
+        createdAt: Date.now(),
+        settings: {
+          maxPlayers: 4,
+          isPrivate: false,
+          allowBots: false,
+          startingCash: 1500,
+          doubleRent: true,
+          vacationCash: true,
+          auction: true,
+          noRentInPrison: false,
+          mortgage: true,
+          evenBuild: true,
+        },
+        players: [
+          { id: 'p1', nickname: 'Alice', avatar: '👑', color: '#C4E64A', isHost: true, connected: true, seatIndex: 0 },
+          { id: 'p2', nickname: 'Bob', avatar: '🎩', color: '#FFC83D', isHost: false, connected: true, seatIndex: 1 },
+          { id: 'p3', nickname: 'Charlie', avatar: '🐱', color: '#559BD6', isHost: false, connected: true, seatIndex: 2 },
+          { id: 'p4', nickname: 'Diana', avatar: '🚀', color: '#FF8738', isHost: false, connected: true, seatIndex: 3 },
+        ],
+        gameState: {
+          phase: 'in_progress',
+          turnOrder: ['p1', 'p2', 'p3', 'p4'],
+          currentTurnIndex: 0,
+          activePlayerId: 'p1',
+          turnPhase: 'action_pending',
+          lastDiceRoll: { die1: 4, die2: 3, total: 7, isDouble: false },
+          startingSalary: 200,
+          vacationPot: 150,
+          players: {
+            p1: { id: 'p1', position: 7, cash: 1350, inPrison: false, prisonTurns: 0, isBankrupt: false },
+            p2: { id: 'p2', position: 15, cash: 1280, inPrison: false, prisonTurns: 0, isBankrupt: false },
+            p3: { id: 'p3', position: 27, cash: 1420, inPrison: false, prisonTurns: 0, isBankrupt: false },
+            p4: { id: 'p4', position: 40, cash: 1100, inPrison: false, prisonTurns: 0, isBankrupt: false },
+          },
+          properties: {
+            '1': { ownerId: 'p1', houses: 0, isMortgaged: false },
+            '3': { ownerId: 'p1', houses: 2, isMortgaged: false },
+            '13': { ownerId: 'p2', houses: 0, isMortgaged: false },
+            '14': { ownerId: 'p2', houses: 0, isMortgaged: false },
+            '25': { ownerId: 'p3', houses: 0, isMortgaged: false },
+            '41': { ownerId: 'p4', houses: 0, isMortgaged: false },
+            '47': { ownerId: 'p4', houses: 5, isMortgaged: false },
+          },
+          rules: {
+            doubleRent: true,
+            vacationCash: true,
+            auction: true,
+            noRentInPrison: false,
+            mortgage: true,
+            evenBuild: true,
+          },
+        },
+      };
+      setCurrentSessionId('p1');
+      setConnectionStatus('connected');
+      setRoomSnapshot(mockSnap);
+      setScreen('room');
+      return;
+    }
+
     const backendUrl =
       import.meta.env.VITE_SERVER_URL ||
       (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
@@ -194,7 +260,7 @@ export default function App() {
     };
   }, []);
 
-  const handleCreateRoom = (avatar: string = '🟢', isPrivate: boolean = false) => {
+  const handleCreateRoom = (color: string = '#C4E64A', isPrivate: boolean = false) => {
     if (!socket) {
       setServerError('Connecting to game server...');
       return;
@@ -205,7 +271,7 @@ export default function App() {
       SOCKET_EVENTS.ROOM_CREATE,
       {
         nickname: nickname.trim() || 'Player',
-        avatar,
+        color,
         settings: isPrivate ? { isPrivate: true } : undefined,
       },
       (ack: SocketAck<RoomSnapshot>) => {
@@ -228,7 +294,7 @@ export default function App() {
     );
   };
 
-  const handleJoinByCode = (code: string, avatar: string = '🟢') => {
+  const handleJoinByCode = (code: string, color: string = '#C4E64A') => {
     if (!socket) {
       setServerError('Connecting to game server...');
       return;
@@ -240,7 +306,7 @@ export default function App() {
       {
         roomCode: code,
         nickname: nickname.trim() || 'Player',
-        avatar,
+        color,
       },
       (ack: SocketAck<RoomSnapshot>) => {
         if (!ack.ok) {
@@ -343,8 +409,8 @@ export default function App() {
         <LandingPage
           nickname={nickname}
           onNicknameChange={setNickname}
-          onPlay={(avatar) => handleCreateRoom(avatar, false)}
-          onCreatePrivate={(avatar) => handleCreateRoom(avatar, true)}
+          onPlay={(color) => handleCreateRoom(color, false)}
+          onCreatePrivate={(color) => handleCreateRoom(color, true)}
           onJoinByCode={handleJoinByCode}
           onSpectateByCode={handleSpectateByCode}
           serverError={serverError}

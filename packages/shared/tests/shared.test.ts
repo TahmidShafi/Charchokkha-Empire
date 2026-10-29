@@ -13,6 +13,10 @@ import {
   RollDicePayloadSchema,
   BuyPropertyPayloadSchema,
   EndTurnPayloadSchema,
+  PLAYER_COLORS,
+  PLAYER_COLOR_HEXES,
+  PlayerSchema,
+  SelectColorPayloadSchema,
 } from '../src/index.js';
 
 describe('Shared Zod Schemas', () => {
@@ -210,6 +214,71 @@ describe('Shared Zod Schemas', () => {
 
       expect(BuyPropertyPayloadSchema.safeParse({ roomCode: 'ROOM1' }).success).toBe(true);
       expect(EndTurnPayloadSchema.safeParse({ roomCode: 'ROOM1' }).success).toBe(true);
+    });
+
+    it('validates 8 canonical player colors and color payload schemas', () => {
+      expect(PLAYER_COLORS).toHaveLength(8);
+      expect(PLAYER_COLOR_HEXES).toHaveLength(8);
+
+      const expectedColors = [
+        '#C4E64A',
+        '#FFC83D',
+        '#FF8738',
+        '#D7474D',
+        '#559BD6',
+        '#70DDE8',
+        '#00A99A',
+        '#69E653',
+      ];
+      expect(PLAYER_COLOR_HEXES).toEqual(expectedColors);
+
+      const parsedPlayer = PlayerSchema.safeParse({
+        id: 'p1',
+        nickname: 'Alice',
+        isHost: true,
+        connected: true,
+        seatIndex: 0,
+        color: '#559BD6',
+      });
+      expect(parsedPlayer.success).toBe(true);
+      if (parsedPlayer.success) {
+        expect(parsedPlayer.data.color).toBe('#559BD6');
+      }
+
+      // Default color
+      const defaultPlayer = PlayerSchema.safeParse({
+        id: 'p2',
+        nickname: 'Bob',
+        isHost: false,
+        connected: true,
+        seatIndex: 1,
+      });
+      expect(defaultPlayer.success).toBe(true);
+      if (defaultPlayer.success) {
+        expect(defaultPlayer.data.color).toBe('#C4E64A');
+      }
+
+      expect(
+        SelectColorPayloadSchema.safeParse({
+          roomCode: 'ABCD',
+          color: '#FF8738',
+        }).success
+      ).toBe(true);
+
+      expect(
+        CreateRoomPayloadSchema.safeParse({
+          nickname: 'Host',
+          color: '#C4E64A',
+        }).success
+      ).toBe(true);
+
+      expect(
+        JoinRoomPayloadSchema.safeParse({
+          roomCode: 'ABCD',
+          nickname: 'Guest',
+          color: '#FFC83D',
+        }).success
+      ).toBe(true);
     });
   });
 });

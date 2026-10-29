@@ -6,7 +6,7 @@ describe('Token Movement Step Path Calculator', () => {
   it('returns empty path when from and to positions are identical', () => {
     expect(calculateStepPath(0, 0)).toEqual([]);
     expect(calculateStepPath(15, 15)).toEqual([]);
-    expect(calculateStepPath(39, 39)).toEqual([]);
+    expect(calculateStepPath(47, 47)).toEqual([]);
   });
 
   it('calculates sequential clockwise path for normal forward rolls', () => {
@@ -19,10 +19,10 @@ describe('Token Movement Step Path Calculator', () => {
 
   it('correctly wraps around past START (space 0)', () => {
     // Player on space 38 moves 4 spaces past START to space 2
-    expect(calculateStepPath(38, 2)).toEqual([39, 0, 1, 2]);
+    expect(calculateStepPath(46, 2)).toEqual([47, 0, 1, 2]);
 
     // Player on space 39 rolls 1 to land directly on START
-    expect(calculateStepPath(39, 0)).toEqual([0]);
+    expect(calculateStepPath(47, 0)).toEqual([0]);
   });
 
   it('handles corner traversal correctly', () => {
@@ -38,8 +38,8 @@ describe('Token Movement Step Path Calculator', () => {
 
   it('jumps directly for direct rule transfers like Go to Prison (30 -> 10)', () => {
     // When arrested, player transfers from 30 directly to 10 (forward distance = 20 > 12)
-    const arrestPath = calculateStepPath(30, 10);
-    expect(arrestPath).toEqual([10]);
+    const arrestPath = calculateStepPath(36, 12);
+    expect(arrestPath).toEqual([12]);
   });
 
   it('jumps directly for card warps spanning greater than 12 spaces', () => {

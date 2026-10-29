@@ -969,13 +969,17 @@ button:disabled {
   display: flex;
   align-items: center;
   justify-content: center;
+  min-width: 0;
+  min-height: 0;
 }
 
 .board-grid-tabletop {
-  /* Keep square aspect-ratio and scale fluidly to viewport bounds */
-  width: min(calc(100vw - 32px), calc(100vh - 150px), 820px);
-  height: min(calc(100vw - 32px), calc(100vh - 150px), 820px);
+  /* Keep square aspect-ratio and scale fluidly to viewport bounds without overflow */
+  width: min(calc(100% - 8px), calc(100vh - 160px), 820px);
+  height: auto;
   aspect-ratio: 1 / 1;
+  max-width: 100%;
+  max-height: calc(100vh - 160px);
   background: var(--board-bg);
   border: 2px solid var(--border-default);
   border-radius: var(--radius-lg);
@@ -987,33 +991,83 @@ button:disabled {
   user-select: none;
 }
 
+/* Edge Tracks */
+.board-top-edge-track {
+  display: grid;
+  grid-template-columns: repeat(11, 1fr);
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+}
+
+.board-right-edge-track {
+  display: grid;
+  grid-template-rows: repeat(11, 1fr);
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.board-bottom-edge-track {
+  display: grid;
+  grid-template-columns: repeat(11, 1fr);
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+}
+
+.board-left-edge-track {
+  display: grid;
+  grid-template-rows: repeat(11, 1fr);
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
 /* Base Board Tile */
 .board-tile {
   background: var(--tile-bg);
   border: 1px solid var(--tile-border);
   position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: space-between;
-  padding: 3px 2px;
   overflow: hidden;
-  transition: background-color var(--transition-fast);
+  box-sizing: border-box;
+  transition: background-color var(--transition-fast), border-color var(--transition-fast);
+  cursor: pointer;
+  min-width: 0;
+  min-height: 0;
 }
 
 .board-tile:hover {
   background: var(--tile-bg-hover);
 }
 
-/* Inward-facing color strips */
+/* Vertical Edge Tiles (Top & Bottom tracks) - Tall and narrow */
+.tile-edge-vertical {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2px 1px;
+}
+
+/* Horizontal Edge Tiles (Left & Right tracks) - Wide and short */
+.tile-edge-horizontal {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1px 2px;
+}
+
+/* Inward-facing ownership color strips */
 .inward-edge-top {
   flex-direction: column;
 }
 .inward-edge-top .tile-color-strip {
   order: 2;
   width: 100%;
-  height: 6px;
-  margin-top: auto;
+  height: 5px;
+  flex-shrink: 0;
 }
 
 .inward-edge-bottom {
@@ -1022,8 +1076,8 @@ button:disabled {
 .inward-edge-bottom .tile-color-strip {
   order: 0;
   width: 100%;
-  height: 6px;
-  margin-bottom: auto;
+  height: 5px;
+  flex-shrink: 0;
 }
 
 .inward-edge-left {
@@ -1032,8 +1086,8 @@ button:disabled {
 .inward-edge-left .tile-color-strip {
   order: 2;
   height: 100%;
-  width: 6px;
-  margin-left: auto;
+  width: 5px;
+  flex-shrink: 0;
 }
 
 .inward-edge-right {
@@ -1042,42 +1096,75 @@ button:disabled {
 .inward-edge-right .tile-color-strip {
   order: 0;
   height: 100%;
-  width: 6px;
-  margin-right: auto;
+  width: 5px;
+  flex-shrink: 0;
 }
 
 .tile-color-strip {
   border-radius: 1px;
+  flex-shrink: 0;
 }
 
-/* Improvements (Houses / Hotel) */
+/* Improvements (Houses / Hotel) - Placed in flex flow between body & color strip */
 .tile-improvements-strip {
-  position: absolute;
-  top: 2px;
-  left: 2px;
+  position: static;
+  order: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   z-index: 5;
+  pointer-events: none;
+  flex-shrink: 0;
+}
+
+.inward-edge-top .tile-improvements-strip {
+  width: 100%;
+  margin-bottom: 2px;
+}
+
+.inward-edge-bottom .tile-improvements-strip {
+  width: 100%;
+  margin-top: 2px;
+}
+
+.inward-edge-left .tile-improvements-strip {
+  height: 100%;
+  margin-right: 2px;
+}
+
+.inward-edge-right .tile-improvements-strip {
+  height: 100%;
+  margin-left: 2px;
 }
 
 .houses-pips-row {
   display: flex;
   gap: 2px;
+  align-items: center;
+  justify-content: center;
 }
 
 .house-pip-dot {
-  width: 6px;
-  height: 6px;
+  width: clamp(4px, 0.7vw, 6px);
+  height: clamp(4px, 0.7vw, 6px);
   background: #22c55e;
   border-radius: 1px;
-  box-shadow: 0 0 4px #22c55e;
+  box-shadow: 0 0 3px #22c55e;
+  flex-shrink: 0;
 }
 
 .hotel-improvement-chip {
   background: #ef4444;
   color: #ffffff;
-  font-size: 0.55rem;
-  font-weight: 700;
+  font-size: clamp(0.38rem, 0.7vw, 0.52rem);
+  font-weight: 800;
   padding: 1px 3px;
   border-radius: 2px;
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  line-height: 1;
+  white-space: nowrap;
 }
 
 /* Mortgage Hatch Overlay */
@@ -1115,44 +1202,150 @@ button:disabled {
 
 /* Tile Body Content */
 .tile-body-box {
+  flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
   width: 100%;
   overflow: hidden;
-  padding: 2px 1px;
+  padding: 1px 1px;
+  justify-content: center;
+  min-width: 0;
+  min-height: 0;
 }
 
 .tile-category-badge {
-  font-size: 0.75rem;
+  font-size: clamp(0.50rem, 0.95vw, 0.74rem);
   line-height: 1;
   margin-bottom: 1px;
 }
 
 .tile-title-text {
-  font-size: clamp(0.55rem, 1.1vw, 0.7rem);
-  font-weight: 600;
-  color: var(--text-primary);
-  line-height: 1.15;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  font-size: clamp(0.38rem, 0.85vw, 0.58rem);
+  font-weight: 700;
+  color: #f8fafc;
+  line-height: 1.08;
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  text-align: center;
   max-width: 100%;
+  letter-spacing: -0.012em;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Vertical Edge Specifics (Top & Bottom) */
+.tile-edge-vertical .tile-body-box {
+  padding: 1px 0;
+}
+
+.tile-edge-vertical .tile-title-text {
+  font-size: clamp(0.35rem, 0.78vw, 0.54rem);
+  line-height: 1.04;
+  letter-spacing: -0.015em;
+  hyphens: auto;
+  -webkit-line-clamp: 3;
+}
+
+.tile-edge-vertical .tile-price-tag {
+  font-size: clamp(0.40rem, 0.82vw, 0.56rem);
+  margin-top: 1px;
+}
+
+.tile-edge-vertical .tile-subtext-tag {
+  font-size: clamp(0.34rem, 0.72vw, 0.48rem);
+}
+
+.tile-edge-vertical .tile-category-badge {
+  font-size: clamp(0.48rem, 0.9vw, 0.68rem);
+}
+
+/* Horizontal Edge Specifics (Left & Right) */
+.tile-edge-horizontal .tile-body-box {
+  flex: 1;
+  padding: 0 1px;
+}
+
+.tile-edge-horizontal .tile-title-text {
+  font-size: clamp(0.36rem, 0.82vw, 0.56rem);
+  line-height: 1.05;
+  -webkit-line-clamp: 2;
+}
+
+.tile-edge-horizontal .tile-price-tag {
+  font-size: clamp(0.40rem, 0.82vw, 0.56rem);
+  margin-top: 1px;
+}
+
+.tile-edge-horizontal .tile-subtext-tag {
+  font-size: clamp(0.34rem, 0.72vw, 0.48rem);
+}
+
+.tile-edge-horizontal .tile-category-badge {
+  font-size: clamp(0.48rem, 0.9vw, 0.68rem);
+}
+
+/* Specialized styling for the 4 Airport Tiles */
+.board-tile.tile-type-airport {
+  background: linear-gradient(145deg, rgba(14, 165, 233, 0.1) 0%, rgba(15, 23, 42, 0.75) 100%), var(--tile-bg);
+  border-color: rgba(56, 189, 248, 0.35);
+}
+
+.board-tile.tile-type-airport:hover {
+  border-color: rgba(56, 189, 248, 0.75);
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.25);
+}
+
+.tile-type-airport .tile-body-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 1px 0;
+  overflow: visible;
+}
+
+.tile-type-airport .tile-category-badge {
+  font-size: clamp(0.58rem, 1vw, 0.80rem);
+  line-height: 1;
+  margin-bottom: 1px;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6));
+}
+
+.tile-title-text.tile-airport-name {
+  font-size: clamp(0.36rem, 0.82vw, 0.58rem);
+  font-weight: 700;
+  color: #f8fafc;
+  line-height: 1.08;
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  text-align: center;
+  max-width: 100%;
+  margin: 1px 0;
+  letter-spacing: -0.015em;
+  display: block;
 }
 
 .tile-price-tag {
-  font-size: clamp(0.55rem, 1vw, 0.65rem);
+  font-size: clamp(0.40rem, 0.82vw, 0.56rem);
   font-weight: 700;
   color: #86efac;
   font-family: var(--font-mono);
   margin-top: 1px;
+  line-height: 1;
 }
 
 .tile-subtext-tag {
-  font-size: clamp(0.5rem, 0.9vw, 0.6rem);
+  font-size: clamp(0.34rem, 0.72vw, 0.48rem);
   color: var(--text-muted);
-  font-weight: 500;
+  font-weight: 600;
+  line-height: 1;
 }
 
 /* Ownership Chip */
@@ -1193,16 +1386,11 @@ button:disabled {
 }
 
 .player-board-token {
-  width: 20px;
-  height: 20px;
-  background: var(--bg-surface-3);
-  border: 2px solid #ffffff;
-  border-radius: 50%;
-  display: flex;
+  position: relative;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.75rem;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.8);
+  filter: drop-shadow(0 2px 5px rgba(0, 0, 0, 0.75));
   transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1);
   animation: token-hop-in 0.18s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
@@ -1230,20 +1418,24 @@ button:disabled {
   text-align: center;
   width: 100%;
   height: 100%;
-  padding: 4px;
+  padding: 3px;
+  box-sizing: border-box;
 }
 
 .corner-icon-symbol {
-  font-size: 1.35rem;
+  font-size: clamp(0.75rem, 1.6vw, 1.25rem);
+  line-height: 1;
   margin-bottom: 2px;
 }
 
 .corner-primary-label {
-  font-size: clamp(0.65rem, 1.2vw, 0.8rem);
+  font-size: clamp(0.42rem, 0.95vw, 0.68rem);
   font-weight: 800;
   color: #ffffff;
   text-transform: uppercase;
-  letter-spacing: 0.03em;
+  letter-spacing: -0.01em;
+  line-height: 1.05;
+  word-break: break-word;
 }
 
 .corner-start .corner-primary-label {
@@ -1251,10 +1443,12 @@ button:disabled {
 }
 
 .corner-sub-caption {
-  font-size: clamp(0.5rem, 0.9vw, 0.65rem);
+  font-size: clamp(0.34rem, 0.75vw, 0.50rem);
   color: var(--text-muted);
   font-weight: 600;
   text-transform: uppercase;
+  line-height: 1;
+  margin-top: 1px;
 }
 
 /* --------------------------------------------------------------------------
@@ -1846,6 +2040,14 @@ button:disabled {
   border-radius: 3px;
 }
 
+.prop-group-dot-airport {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.9rem;
+  background: transparent;
+}
+
 .prop-detail-stats-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -2346,8 +2548,8 @@ button:disabled {
    10. RESPONSIVE MEDIA QUERIES (320px to 1920px)
    -------------------------------------------------------------------------- */
 
-/* Tablet & Mobile Screens (<= 960px) */
-@media (max-width: 960px) {
+/* Tablet & Mobile Screens (<= 1024px) */
+@media (max-width: 1024px) {
   .room-desktop-chat-sidebar,
   .room-desktop-settings-sidebar {
     display: none;
@@ -2359,6 +2561,8 @@ button:disabled {
 
   .mobile-bottom-nav-bar {
     display: flex;
+    height: calc(52px + env(safe-area-inset-bottom, 0px));
+    padding-bottom: env(safe-area-inset-bottom, 0px);
   }
 
   .room-board-center-stage {
@@ -2368,7 +2572,9 @@ button:disabled {
   /* Scale board to fit mobile viewport cleanly with no overflow */
   .board-grid-tabletop {
     width: min(calc(100vw - 16px), calc(100vh - 180px));
-    height: min(calc(100vw - 16px), calc(100vh - 180px));
+    height: auto;
+    max-height: calc(100vh - 180px);
+    aspect-ratio: 1 / 1;
   }
 
   .tactile-dice-cube {
@@ -2380,7 +2586,7 @@ button:disabled {
 /* Small Phones (<= 480px: 320px, 360px, 375px, 390px, 414px, 430px) */
 @media (max-width: 480px) {
   .room-top-header {
-    padding: 0 0.6rem;
+    padding: 0 0.5rem;
   }
 
   .room-code-action-tag {
@@ -2391,22 +2597,60 @@ button:disabled {
     display: none;
   }
 
+  /* Compact Roster Bar */
+  .room-players-roster-bar {
+    padding: 0.3rem 0.5rem;
+  }
+
+  .roster-bar-inner {
+    gap: 0.4rem;
+  }
+
+  .player-roster-card {
+    padding: 0.25rem 0.45rem;
+    gap: 0.35rem;
+  }
+
+  .roster-name-truncate {
+    max-width: 65px;
+  }
+
   .board-grid-tabletop {
-    width: min(calc(100vw - 10px), calc(100vh - 175px));
-    height: min(calc(100vw - 10px), calc(100vh - 175px));
+    width: min(calc(100vw - 10px), calc(100vh - 170px));
+    height: auto;
+    max-height: calc(100vh - 170px);
+    aspect-ratio: 1 / 1;
   }
 
   /* In mobile portrait, adjust text sizing so tiles remain crisp and readable */
-  .tile-title-text {
-    font-size: 0.55rem;
+  .tile-edge-vertical .tile-title-text {
+    font-size: 0.35rem;
+    line-height: 1.04;
+  }
+
+  .tile-edge-horizontal .tile-title-text {
+    font-size: 0.36rem;
+    line-height: 1.05;
   }
 
   .tile-price-tag {
-    font-size: 0.55rem;
+    font-size: 0.42rem;
   }
 
   .tile-category-badge {
-    font-size: 0.65rem;
+    font-size: 0.52rem;
+  }
+
+  .corner-icon-symbol {
+    font-size: 0.85rem;
+  }
+
+  .corner-primary-label {
+    font-size: 0.42rem;
+  }
+
+  .corner-sub-caption {
+    font-size: 0.32rem;
   }
 
   .player-board-token {
@@ -2435,6 +2679,7 @@ button:disabled {
   .btn-secondary-action {
     padding: 0.5rem 0.75rem;
     font-size: 0.8rem;
+    min-height: 40px;
   }
 
   /* Modals adapt to touch-friendly bottom sheets */
@@ -2450,19 +2695,25 @@ button:disabled {
   }
 }
 
-/* Mobile Landscape (max-height <= 500px) */
-@media (max-height: 500px) and (orientation: landscape) {
+/* Mobile Landscape (max-height <= 520px) */
+@media (max-height: 520px) and (orientation: landscape) {
   .room-top-header {
-    height: 42px;
+    height: 40px;
   }
 
   .room-players-roster-bar {
     display: none;
   }
 
+  .room-board-center-stage {
+    padding: 0.25rem;
+  }
+
   .board-grid-tabletop {
-    width: min(calc(100vw - 200px), calc(100vh - 60px));
-    height: min(calc(100vw - 200px), calc(100vh - 60px));
+    width: min(calc(100vw - 180px), calc(100vh - 48px));
+    height: auto;
+    max-height: calc(100vh - 48px);
+    aspect-ratio: 1 / 1;
   }
 
   .courtyard-dice-stage {
@@ -2470,12 +2721,17 @@ button:disabled {
   }
 
   .tactile-dice-cube {
-    width: 34px;
-    height: 34px;
+    width: 32px;
+    height: 32px;
+  }
+
+  .tactile-pip {
+    width: 5px;
+    height: 5px;
   }
 
   .courtyard-action-controls {
-    max-width: 180px;
+    max-width: 170px;
   }
 
   .courtyard-turn-status-bar {
@@ -3463,3 +3719,201 @@ button:disabled {
 }
 
 
+
+
+/* ==========================================================================
+   Human-Like Player Characters & Dynamic Ownership Colors
+   ========================================================================== */
+
+.player-character-wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+  flex-shrink: 0;
+  transition: transform var(--transition-fast), filter var(--transition-fast);
+}
+
+.character-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.45));
+}
+
+/* Glow Ring around selected or highlighted character */
+.character-glow-ring {
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  border: 2px solid var(--character-color, #c4e64a);
+  box-shadow: 0 0 16px var(--character-color, rgba(196, 230, 74, 0.6));
+  pointer-events: none;
+  animation: glowPulse 2s infinite ease-in-out;
+}
+
+@keyframes glowPulse {
+  0%, 100% {
+    opacity: 0.85;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.06);
+  }
+}
+
+/* Character Selection Bounce / Scale */
+.character-selected {
+  transform: scale(1.1);
+  animation: selectBounce 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes selectBounce {
+  0% { transform: scale(0.92); }
+  60% { transform: scale(1.18); }
+  100% { transform: scale(1.1); }
+}
+
+/* Disabled / Taken Character */
+.character-taken {
+  opacity: 0.35;
+  filter: grayscale(0.65) brightness(0.6);
+  cursor: not-allowed !important;
+}
+
+/* Token Step Hopping Animation */
+.character-hopping {
+  animation: tokenHop 0.28s ease-in-out infinite;
+}
+
+@keyframes tokenHop {
+  0%, 100% {
+    transform: translateY(0) scale(1, 1);
+  }
+  40% {
+    transform: translateY(-8px) scale(1.06, 0.94);
+  }
+  60% {
+    transform: translateY(-8px) scale(0.96, 1.04);
+  }
+  85% {
+    transform: translateY(1px) scale(1.04, 0.96);
+  }
+}
+
+/* Landing Page Character & Color Selector */
+.landing-character-picker {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  margin-bottom: 0.4rem;
+  width: 100%;
+}
+
+.character-preview-stage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1.25rem;
+}
+
+.character-preview-ring {
+  width: 76px;
+  height: 76px;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.08) 0%, rgba(18, 14, 30, 0.95) 75%);
+  border: 2.5px solid var(--primary-purple);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-fast);
+}
+
+.character-name-badge {
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.2rem 0.75rem;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.character-palette-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  max-width: 320px;
+}
+
+.character-swatch-chip {
+  position: relative;
+  width: 34px;
+  height: 38px;
+  background: var(--bg-surface-2);
+  border: 1.5px solid transparent;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  padding: 2px;
+}
+
+.character-swatch-chip:hover:not(:disabled) {
+  background: var(--bg-surface-3);
+  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.character-swatch-chip.chip-active {
+  background: rgba(255, 255, 255, 0.12);
+  transform: translateY(-3px) scale(1.08);
+}
+
+.character-swatch-chip.chip-taken {
+  opacity: 0.35;
+  cursor: not-allowed;
+  filter: grayscale(0.65);
+}
+
+/* Dynamic Property Ownership Tile Styling */
+.tile-ownership-strip {
+  border-radius: 1px;
+}
+
+.tile-ownership-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 5px;
+  border-radius: 9999px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  font-size: 0.65rem;
+  font-weight: 700;
+  margin-top: 2px;
+}
+
+/* Accessibility: Reduced Motion */
+@media (prefers-reduced-motion: reduce) {
+  .player-character-wrapper,
+  .character-selected,
+  .character-hopping,
+  .character-glow-ring,
+  .player-board-token {
+    animation: none !important;
+    transition: none !important;
+  }
+  .character-selected {
+    transform: scale(1.08) !important;
+  }
+}

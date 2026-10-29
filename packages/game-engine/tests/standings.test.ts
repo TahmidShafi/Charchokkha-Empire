@@ -49,9 +49,9 @@ describe('Player Net Worth and Standings Engine Unit Tests', () => {
     state.players['p1'].cash = 2000;
     state.winnerId = 'p1';
 
-    // p2: Active, net worth 1800 (cash 1400 + property #39 New York price 400)
+    // p2: Active, net worth 1800 (cash 1400 + property #47 Saint Martin price 400)
     state.players['p2'].cash = 1400;
-    state.properties[39] = { ownerId: 'p2', houses: 0, isMortgaged: false };
+    state.properties[47] = { ownerId: 'p2', houses: 0, isMortgaged: false };
 
     // p3: Bankrupt second (eliminationOrder index 1)
     state.players['p3'].cash = 0;
@@ -83,7 +83,7 @@ describe('Player Net Worth and Standings Engine Unit Tests', () => {
     expect(standings[1].rank).toBe(2);
     expect(standings[1].nickname).toBe('Bob');
     expect(standings[1].netWorth).toBe(1800);
-    expect(standings[1].properties).toEqual([39]);
+    expect(standings[1].properties).toEqual([47]);
     expect(standings[1].propertyCount).toBe(1);
 
     // 3rd: Charlie (Bankrupt 2nd, later than Diana -> 3rd place)
@@ -113,8 +113,8 @@ describe('Player Net Worth and Standings Engine Unit Tests', () => {
     state.turnPhase = 'need_roll';
     state.players['p2'].position = 0;
     // roll [1, 0] doesn't exist, roll injected [1, 0]? Let's roll [1, 1] -> total 2, or move to position 1
-    // Salvador is space 1. Let's move p2 from 39 to 1 with roll [1, 1] from 39: 39 + 2 = 41 % 40 = 1
-    state.players['p2'].position = 39;
+    // Rahattarpool is space 1. Let's move p2 from 47 to 1 with roll [1, 1] from 47: 47 + 2 = 49 % 48 = 1
+    state.players['p2'].position = 47;
     const rollRes = processRollDice(state, 'p2', [1, 1]);
     expect(rollRes.success).toBe(true);
     state = rollRes.state;
@@ -211,8 +211,8 @@ describe('Player Net Worth and Standings Engine Unit Tests', () => {
     // Inject non-purchasable space 0 (START) and out-of-range space 999
     state.properties[0] = { ownerId: 'p1', houses: 0, isMortgaged: false };
     state.properties[999] = { ownerId: 'p1', houses: 0, isMortgaged: false };
-    // Normal property 39 (New York: 400)
-    state.properties[39] = { ownerId: 'p1', houses: 0, isMortgaged: false };
+    // Normal property 47 (Saint Martin: 400)
+    state.properties[47] = { ownerId: 'p1', houses: 0, isMortgaged: false };
 
     // Net worth should ignore space 0 (no price) and out-of-range space 999 (normalized to 39 in getBoardSpace, but cleanly evaluated without NaN)
     const nw = calculatePlayerNetWorth(state, 'p1');

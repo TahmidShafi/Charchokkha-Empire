@@ -5,6 +5,7 @@ import {
   getBoardSpace,
 } from '@charchokkha/game-engine';
 import { PROPERTY_GROUP_COLORS, getSpaceBadge } from '../boardData';
+import { PlayerCharacter } from './PlayerCharacter';
 
 export interface PostMatchResultsProps {
   roomSnapshot: RoomSnapshot;
@@ -84,7 +85,11 @@ export const PostMatchResults: React.FC<PostMatchResultsProps> = ({
 
             <div className="winner-identity-block">
               <span className="winner-avatar-badge" aria-hidden="true">
-                {winnerStanding?.avatar || winnerPlayer?.avatar || '🟢'}
+                <PlayerCharacter
+                  color={winnerPlayer?.color || winnerStanding?.color || '#FFC83D'}
+                  size={36}
+                  showGlow
+                />
               </span>
               <div className="winner-text-details">
                 <span className="winner-eyebrow">CHAMPION OF CHARCHOKKHA</span>
@@ -174,7 +179,10 @@ export const PostMatchResults: React.FC<PostMatchResultsProps> = ({
 
                     <div className="standing-player-info">
                       <span className="standing-avatar" aria-hidden="true">
-                        {standing.avatar}
+                        <PlayerCharacter
+                          color={standing.color || roomSnapshot.players.find((p) => p.id === standing.playerId)?.color || '#C4E64A'}
+                          size={24}
+                        />
                       </span>
                       <div className="standing-name-col">
                         <div className="standing-name-row">
@@ -230,7 +238,10 @@ export const PostMatchResults: React.FC<PostMatchResultsProps> = ({
                   >
                     <div className="stats-card-header">
                       <span className="stats-avatar" aria-hidden="true">
-                        {standing.avatar}
+                        <PlayerCharacter
+                          color={standing.color || roomSnapshot.players.find((p) => p.id === standing.playerId)?.color || '#C4E64A'}
+                          size={24}
+                        />
                       </span>
                       <span className="stats-player-name">
                         {standing.nickname}
@@ -329,9 +340,11 @@ export const PostMatchResults: React.FC<PostMatchResultsProps> = ({
                               />
                               <div className="property-chip-body">
                                 <div className="property-chip-top">
-                                  <span className="property-badge-symbol" aria-hidden="true">
-                                    {badge.symbol}
-                                  </span>
+                                  {space.type !== 'property' && badge?.symbol ? (
+                                    <span className="property-badge-symbol" aria-hidden="true">
+                                      {badge.symbol}
+                                    </span>
+                                  ) : null}
                                   <span className="property-chip-name">{space.name}</span>
                                 </div>
                                 <div className="property-chip-bottom">

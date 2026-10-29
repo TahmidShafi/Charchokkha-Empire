@@ -14,6 +14,7 @@ export const SOCKET_EVENTS = {
   // Room operations (Client -> Server)
   ROOM_CREATE: 'room:create',
   ROOM_JOIN: 'room:join',
+  ROOM_SELECT_COLOR: 'room:select_color',
   ROOM_SPECTATE: 'room:spectate',
   ROOM_REMATCH: 'room:rematch',
   ROOM_LEAVE: 'room:leave',
@@ -122,10 +123,39 @@ export const RoomLifecycleStateSchema = z.enum([
 
 export type RoomLifecycleState = z.infer<typeof RoomLifecycleStateSchema>;
 
+/**
+ * 8 Canonical player colors available in Charchokkha Empire
+ */
+export const PLAYER_COLORS = [
+  { id: 'lime', name: 'Lime Green', hex: '#C4E64A' },
+  { id: 'yellow', name: 'Golden Yellow', hex: '#FFC83D' },
+  { id: 'orange', name: 'Orange', hex: '#FF8738' },
+  { id: 'red', name: 'Red', hex: '#D7474D' },
+  { id: 'blue', name: 'Blue', hex: '#559BD6' },
+  { id: 'cyan', name: 'Cyan', hex: '#70DDE8' },
+  { id: 'teal', name: 'Teal', hex: '#00A99A' },
+  { id: 'bright_green', name: 'Bright Green', hex: '#69E653' },
+] as const;
+
+export const PLAYER_COLOR_HEXES = [
+  '#C4E64A',
+  '#FFC83D',
+  '#FF8738',
+  '#D7474D',
+  '#559BD6',
+  '#70DDE8',
+  '#00A99A',
+  '#69E653',
+] as const;
+
+export type PlayerColor = (typeof PLAYER_COLORS)[number];
+export type PlayerColorHex = (typeof PLAYER_COLOR_HEXES)[number];
+
 export const PlayerSchema = z.object({
   id: z.string(),
   nickname: z.string().trim().min(1).max(25),
   avatar: z.string().default('🟢'),
+  color: z.string().default('#C4E64A'),
   isHost: z.boolean(),
   connected: z.boolean(),
   seatIndex: z.number().int().nonnegative(),
@@ -178,6 +208,7 @@ export const PlayerStandingSchema = z.object({
   playerId: z.string(),
   nickname: z.string(),
   avatar: z.string(),
+  color: z.string().optional(),
   netWorth: z.number().int(),
   cash: z.number().int(),
   isBankrupt: z.boolean(),
@@ -301,6 +332,7 @@ export type SessionAuthenticatedPayload = z.infer<typeof SessionAuthenticatedPay
 export const CreateRoomPayloadSchema = z.object({
   nickname: z.string().trim().min(1, 'Nickname must not be empty').max(25, 'Nickname max 25 chars'),
   avatar: z.string().optional(),
+  color: z.string().optional(),
   settings: RoomSettingsSchema.partial().optional(),
 });
 
@@ -310,10 +342,19 @@ export const JoinRoomPayloadSchema = z.object({
   roomCode: z.string().trim().min(3, 'Room code must have at least 3 characters').max(10),
   nickname: z.string().trim().min(1, 'Nickname must not be empty').max(25),
   avatar: z.string().optional(),
+  color: z.string().optional(),
   asSpectator: z.boolean().optional(),
 });
 
 export type JoinRoomPayload = z.infer<typeof JoinRoomPayloadSchema>;
+
+export const SelectColorPayloadSchema = z.object({
+  roomCode: z.string().trim().min(3, 'Room code must have at least 3 characters').max(10),
+  color: z.string().trim(),
+  requestId: z.string().trim().min(1).max(64).optional(),
+});
+
+export type SelectColorPayload = z.infer<typeof SelectColorPayloadSchema>;
 
 export const SpectateRoomPayloadSchema = z.object({
   roomCode: z.string().trim().min(3, 'Room code must have at least 3 characters').max(10),

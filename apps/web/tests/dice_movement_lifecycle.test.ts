@@ -15,30 +15,30 @@ describe('Dice Roll and Token Movement Lifecycle Suite', () => {
   });
 
   it('calculates wrapped trajectory across START (space 0)', () => {
-    const fromPos = 36;
+    const fromPos = 44;
     const rolledTotal = 8;
-    const toPos = (fromPos + rolledTotal) % TOTAL_SPACES; // (36 + 8) % 40 = 4
+    const toPos = (fromPos + rolledTotal) % TOTAL_SPACES; // (44 + 8) % 48 = 4
 
     const path = calculateStepPath(fromPos, toPos);
     expect(path).toHaveLength(8);
-    expect(path).toEqual([37, 38, 39, 0, 1, 2, 3, 4]);
+    expect(path).toEqual([45, 46, 47, 0, 1, 2, 3, 4]);
     expect(path[path.length - 1]).toBe(4);
   });
 
   it('handles direct jail arrest transfer without multi-tile traversal', () => {
-    // Go to Prison: Space 30 -> Space 10
-    const arrestPath = calculateStepPath(30, 10);
-    expect(arrestPath).toEqual([10]);
+    // Go to Rehab: Space 36 -> Space 12
+    const arrestPath = calculateStepPath(36, 12);
+    expect(arrestPath).toEqual([12]);
     expect(arrestPath).toHaveLength(1);
   });
 
   it('determines the correct landing space details once token finishes movement', () => {
-    const destination = 3; // Space 3: Rio
+    const destination = 3; // Space 3: Chandgaon
     const space = getBoardSpace(destination);
 
     expect(space).toBeDefined();
     expect(space.id).toBe(3);
-    expect(space.name).toBe('Rio');
+    expect(space.name).toBe('Chandgaon');
     expect(space.type).toBe('property');
     expect(space.price).toBe(60);
   });

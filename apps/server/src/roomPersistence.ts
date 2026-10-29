@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type { RoomLifecycleState, RoomSettings } from '@charchokkha/shared';
+import { PLAYER_COLOR_HEXES, type RoomLifecycleState, type RoomSettings } from '@charchokkha/shared';
 import type { GameState as EngineGameState } from '@charchokkha/game-engine';
 import type { GuestSession, ProcessedActionRecord, ServerPlayer, ServerRoom, ServerSpectator } from './roomManager.js';
 
@@ -184,6 +184,7 @@ export class RoomPersistenceManager {
               sessionId: p.sessionId,
               nickname: p.nickname,
               avatar: p.avatar,
+              color: p.color || PLAYER_COLOR_HEXES[p.seatIndex % 8],
               isHost: p.isHost,
               connected: false, // Wait for socket reconnection
               seatIndex: p.seatIndex,

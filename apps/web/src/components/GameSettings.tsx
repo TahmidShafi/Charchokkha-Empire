@@ -1,9 +1,12 @@
-import { type GameState, type Player, type RoomSettings } from '@charchokkha/shared';
+import { PLAYER_COLORS, type GameState, type Player, type RoomSettings } from '@charchokkha/shared';
+import { PlayerCharacter } from './PlayerCharacter';
 import { soundManager } from '../audio/soundManager';
 
 export interface GameSettingsProps {
   playerName: string;
   playerAvatar: string;
+  playerColor?: string;
+  onColorChange?: (color: string) => void;
   isHost: boolean;
   isSpectator?: boolean;
   players: Player[];
@@ -26,7 +29,9 @@ export interface GameSettingsProps {
 
 export function GameSettings({
   playerName,
-  playerAvatar,
+  playerAvatar: _playerAvatar,
+  playerColor,
+  onColorChange,
   isHost,
   isSpectator = false,
   players,
@@ -78,7 +83,11 @@ export function GameSettings({
         <div className="settings-section-card">
           <div className="player-profile-row">
             <div className="player-avatar-badge" title={isSpectator ? 'Spectating Table' : 'Your avatar'}>
-              <span>{isSpectator ? '👁️' : playerAvatar}</span>
+              {isSpectator ? (
+                <span>👁️</span>
+              ) : (
+                <PlayerCharacter color={playerColor || '#C4E64A'} size={28} showGlow />
+              )}
             </div>
             <div className="player-text-meta">
               <div className="player-name-line">
@@ -101,13 +110,48 @@ export function GameSettings({
             </div>
           </div>
 
+          {!isSpectator && onColorChange && (!gameState || gameState.phase === 'waiting') && (
+            <div className="settings-color-palette" style={{ marginTop: '0.75rem' }}>
+              <span className="settings-color-title" style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.4rem' }}>
+                Change Character Color
+              </span>
+              <div className="character-palette-row" role="radiogroup" aria-label="Table Character Colors">
+                {PLAYER_COLORS.map((col) => {
+                  const isSelected = (playerColor || '#C4E64A').toLowerCase() === col.hex.toLowerCase();
+                  const isTaken = players.some(
+                    (p) => p.nickname !== playerName && (p.color || '#C4E64A').toLowerCase() === col.hex.toLowerCase()
+                  );
+                  return (
+                    <button
+                      key={col.id}
+                      type="button"
+                      role="radio"
+                      aria-checked={isSelected}
+                      disabled={isTaken}
+                      className={`character-swatch-chip ${isSelected ? 'chip-active' : ''} ${isTaken ? 'chip-taken' : ''}`}
+                      onClick={() => !isTaken && onColorChange(col.hex)}
+                      title={isTaken ? `${col.name} (Occupied)` : col.name}
+                      aria-label={`${col.name}${isTaken ? ' (taken)' : ''}`}
+                      style={{
+                        '--swatch-color': col.hex,
+                        borderColor: isSelected ? col.hex : 'transparent',
+                        boxShadow: isSelected ? `0 0 10px ${col.hex}88` : undefined,
+                      } as React.CSSProperties}
+                    >
+                      <PlayerCharacter color={col.hex} size={20} isTaken={isTaken} isSelected={isSelected} />
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           {!isSpectator && (
             <button
               type="button"
               className="btn-secondary-action btn-change-token"
               onClick={onAvatarChange}
             >
-              <span>🎨</span> Change Token
+              <span>🎨</span> Cycle Avatar
             </button>
           )}
         </div>
@@ -167,7 +211,7 @@ export function GameSettings({
                   className={`roster-item-row ${isTurn ? 'row-active-turn' : ''}`}
                 >
                   <div className="roster-left">
-                    <span className="roster-avatar">{p.avatar || '🟢'}</span>
+                    <span className="roster-avatar"><PlayerCharacter color={p.color || '#C4E64A'} size={20} /></span>
                     <span className="roster-nickname">
                       {p.nickname} {p.nickname === playerName && '(You)'}
                     </span>

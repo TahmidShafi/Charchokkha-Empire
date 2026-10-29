@@ -184,10 +184,10 @@ describe('Milestone 3 — Authoritative Game Engine Server Integration Suite', (
       expect(gs.lastDiceRoll!.total).toBe(gs.lastDiceRoll!.die1 + gs.lastDiceRoll!.die2);
 
       const p1Pos = gs.players[client1Auth.sessionId].position;
-      if (gs.lastDiceRoll!.total === 8) {
+      if (gs.lastDiceRoll!.total === 9) {
         expect(p1Pos).toBe(0); // Surprise space 8 draws "Advance to START"
       } else {
-        expect(p1Pos).toBe(gs.lastDiceRoll!.total % 40);
+        expect(p1Pos).toBe(gs.lastDiceRoll!.total % 42);
       }
       expect(gs.turnPhase).not.toBe('need_roll');
     }

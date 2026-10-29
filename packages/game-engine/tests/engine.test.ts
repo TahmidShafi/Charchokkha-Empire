@@ -27,8 +27,8 @@ describe('Authoritative Game Engine — Milestone 4 Suite', () => {
   const p2 = 'player_2';
   const p3 = 'player_3';
 
-  it('verifies the board has 40 canonical spaces with unique IDs 0 to 39 without country flags', () => {
-    expect(CANONICAL_BOARD_SPACES).toHaveLength(40);
+  it('verifies the board has 48 canonical spaces with unique IDs 0 to 47 without country flags', () => {
+    expect(CANONICAL_BOARD_SPACES).toHaveLength(48);
     CANONICAL_BOARD_SPACES.forEach((space, index) => {
       expect(space.id).toBe(index);
       expect(getBoardSpace(index).id).toBe(index);
@@ -107,10 +107,10 @@ describe('Authoritative Game Engine — Milestone 4 Suite', () => {
 
     it('awards salary ($200) when passing the starting space across the perimeter', () => {
       const state = createInitialGameState([p1, p2], 1500, 200);
-      // Place p1 at space 37 (San Francisco)
-      state.players[p1].position = 37;
+      // Place p1 at space 45 (Lake Bilash)
+      state.players[p1].position = 45;
 
-      // Roll 4 -> 37 + 4 = 41 -> newPos 1 (Salvador), passed START (41 >= 40)
+      // Roll 4 -> 45 + 4 = 49 -> newPos 1 (Rahattarpool), passed START (49 >= 48)
       const res = processRollDice(state, p1, [2, 2]);
 
       expect(res.success).toBe(true);
@@ -120,25 +120,25 @@ describe('Authoritative Game Engine — Milestone 4 Suite', () => {
 
     it('awards salary ($200) when landing exactly on START (space 0)', () => {
       const state = createInitialGameState([p1, p2], 1500, 200);
-      state.players[p1].position = 35; // Gudaraghat Airport
+      state.players[p1].position = 42; // Gudaraghat Airport
 
-      // Roll 5 -> 35 + 5 = 40 -> newPos 0 (START)
-      const res = processRollDice(state, p1, [2, 3]);
+      // Roll 6 -> 42 + 6 = 48 -> newPos 0 (START)
+      const res = processRollDice(state, p1, [3, 3]);
 
       expect(res.success).toBe(true);
       expect(res.state.players[p1].position).toBe(0);
       expect(res.state.players[p1].cash).toBe(1700);
     });
 
-    it('sends player to In Prison (space 10) when landing on Go to Prison (space 30)', () => {
+    it('sends player to In Prison (space 12) when landing on Go to Prison (space 36)', () => {
       const state = createInitialGameState([p1, p2], 1500, 200);
-      state.players[p1].position = 28;
+      state.players[p1].position = 34;
 
-      // Roll 2 -> 28 + 2 = 30 (Go to Prison)
+      // Roll 2 -> 34 + 2 = 36 (Go to Rehab)
       const res = processRollDice(state, p1, [1, 1]);
 
       expect(res.success).toBe(true);
-      expect(res.state.players[p1].position).toBe(10); // In Prison
+      expect(res.state.players[p1].position).toBe(12); // In Prison
       expect(res.state.players[p1].inPrison).toBe(true);
       expect(res.state.turnPhase).toBe('turn_ended');
     });
@@ -248,9 +248,9 @@ describe('Authoritative Game Engine — Milestone 4 Suite', () => {
     });
 
     it('scales airport rent according to count of airports owned (25, 50, 100, 200)', () => {
-      // Airports: 5, 15, 25, 35
-      const airportSpace = getBoardSpace(5);
-      const ownedAirports: number[] = [5];
+      // Airports: 6, 18, 29, 39
+      const airportSpace = getBoardSpace(6);
+      const ownedAirports: number[] = [6];
 
       const rent1 = calculateRentAmount({
         space: airportSpace,
@@ -262,7 +262,7 @@ describe('Authoritative Game Engine — Milestone 4 Suite', () => {
       });
       expect(rent1).toBe(25);
 
-      ownedAirports.push(15);
+      ownedAirports.push(18);
       const rent2 = calculateRentAmount({
         space: airportSpace,
         ownerId: p1,
@@ -273,7 +273,7 @@ describe('Authoritative Game Engine — Milestone 4 Suite', () => {
       });
       expect(rent2).toBe(50);
 
-      ownedAirports.push(25);
+      ownedAirports.push(30);
       const rent3 = calculateRentAmount({
         space: airportSpace,
         ownerId: p1,
@@ -284,7 +284,7 @@ describe('Authoritative Game Engine — Milestone 4 Suite', () => {
       });
       expect(rent3).toBe(100);
 
-      ownedAirports.push(35);
+      ownedAirports.push(42);
       const rent4 = calculateRentAmount({
         space: airportSpace,
         ownerId: p1,
@@ -297,14 +297,14 @@ describe('Authoritative Game Engine — Milestone 4 Suite', () => {
     });
 
     it('scales utility rent by 4x dice for 1 utility and 10x dice for 2 utilities', () => {
-      // Utilities: 12 (Electric), 28 (Water)
-      const utilSpace = getBoardSpace(12);
+      // Utilities: 15 (Desi Fresh), 22 (Bhai Bhai), 33 (7 dayz)
+      const utilSpace = getBoardSpace(15);
 
       // 1 utility with diceTotal 8 -> 8 * 4 = 32
       const rent1Util = calculateRentAmount({
         space: utilSpace,
         ownerId: p1,
-        getPropertyOwner: (id) => (id === 12 ? p1 : undefined),
+        getPropertyOwner: (id) => (id === 15 ? p1 : undefined),
         getHouses: () => 0,
         isMortgaged: () => false,
         diceTotal: 8,
@@ -315,7 +315,7 @@ describe('Authoritative Game Engine — Milestone 4 Suite', () => {
       const rent2Utils = calculateRentAmount({
         space: utilSpace,
         ownerId: p1,
-        getPropertyOwner: (id) => (id === 12 || id === 27 ? p1 : undefined),
+        getPropertyOwner: (id) => (id === 15 || id === 33 ? p1 : undefined),
         getHouses: () => 0,
         isMortgaged: () => false,
         diceTotal: 8,
@@ -664,13 +664,13 @@ describe('Authoritative Game Engine — Milestone 4 Suite', () => {
       expect(fineRes.state.players[p2].cash).toBe(1450); // 1500 - 50
       expect(fineRes.state.vacationPot).toBe(150); // 100 + 50
 
-      // P2 moves to space 10, rolls 10 to land directly on space 20 (Vacation)
-      fineRes.state.players[p2].position = 10;
+      // P2 moves to space 12, rolls 12 to land directly on space 24 (Vacation)
+      fineRes.state.players[p2].position = 12;
       fineRes.state.activePlayerId = p2;
       fineRes.state.turnPhase = 'need_roll';
-      const vacationRoll = processRollDice(fineRes.state, p2, [5, 5]);
+      const vacationRoll = processRollDice(fineRes.state, p2, [6, 6]);
       expect(vacationRoll.success).toBe(true);
-      expect(vacationRoll.state.players[p2].position).toBe(20);
+      expect(vacationRoll.state.players[p2].position).toBe(24);
       expect(vacationRoll.state.players[p2].cash).toBe(1600); // 1450 + 150 pot
       expect(vacationRoll.state.vacationPot).toBe(0); // Pot emptied
     });

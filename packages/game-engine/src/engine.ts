@@ -307,9 +307,9 @@ export function processRollDice(
   }
 
   // Space resolution
-  if (newPos === 30) {
-    // Go to Prison
-    player.position = 10;
+  if (newPos === 36) {
+    // Go to Rehab
+    player.position = 12;
     player.inPrison = true;
     player.prisonTurns = 0;
     nextState.turnPhase = 'turn_ended';
@@ -328,7 +328,7 @@ export function processRollDice(
     nextState.chestCardIndex += 1;
     const cardMsg = card.apply(nextState, playerId);
     actionSummary += ` Treasure Chest: "${card.text}" (${cardMsg})`;
-    if (nextState.players[playerId].position !== 10) {
+    if (nextState.players[playerId].position !== 12) {
       nextState.turnPhase = 'turn_ended';
     }
   } else if (space.type === 'surprise') {
@@ -336,7 +336,7 @@ export function processRollDice(
     nextState.chanceCardIndex += 1;
     const cardMsg = card.apply(nextState, playerId);
     actionSummary += ` Chance: "${card.text}" (${cardMsg})`;
-    if (nextState.players[playerId].position !== 10) {
+    if (nextState.players[playerId].position !== 12) {
       nextState.turnPhase = 'turn_ended';
     }
   } else if (isPurchasableSpace(space)) {
@@ -380,7 +380,7 @@ export function processRollDice(
     }
   } else {
     // Corners (START, In Prison, Vacation)
-    if (newPos === 20 && nextState.rules.vacationCash && (nextState.vacationPot ?? 0) > 0) {
+    if (newPos === 24 && nextState.rules.vacationCash && (nextState.vacationPot ?? 0) > 0) {
       const pot = nextState.vacationPot!;
       player.cash += pot;
       nextState.vacationPot = 0;

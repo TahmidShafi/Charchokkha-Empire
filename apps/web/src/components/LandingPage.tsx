@@ -1,17 +1,21 @@
 import { useState, useEffect, useRef } from 'react';
+import { PLAYER_COLORS } from '@charchokkha/shared';
+import { PlayerCharacter } from './PlayerCharacter';
 
 export interface LandingPageProps {
   nickname: string;
   onNicknameChange: (name: string) => void;
-  onPlay: (avatar?: string) => void;
-  onCreatePrivate: (avatar?: string) => void;
-  onJoinByCode: (code: string, avatar?: string) => void;
+  onPlay: (color?: string) => void;
+  onCreatePrivate: (color?: string) => void;
+  onJoinByCode: (code: string, color?: string) => void;
   onSpectateByCode?: (code: string) => void;
   serverError?: string;
   isConnecting?: boolean;
+  takenColors?: string[];
 }
 
 export const AVATAR_LIST = ['🟢', '🎩', '⛵', '🐎', '🏎️', '🏰', '🐱', '🦊'];
+export { PLAYER_COLORS };
 
 export function LandingPage({
   nickname,
@@ -22,11 +26,12 @@ export function LandingPage({
   onSpectateByCode,
   serverError,
   isConnecting = false,
+  takenColors = [],
 }: LandingPageProps) {
   const [error, setError] = useState('');
   const [showJoinModal, setShowJoinModal] = useState(false);
   const [joinCodeInput, setJoinCodeInput] = useState('');
-  const [selectedAvatarIndex, setSelectedAvatarIndex] = useState(0);
+  const [selectedColorIndex, setSelectedColorIndex] = useState(0);
   const [submitting, setSubmitting] = useState(false);
 
   const joinInputRef = useRef<HTMLInputElement>(null);
@@ -48,6 +53,8 @@ export function LandingPage({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [showJoinModal]);
 
+  const currentColor = PLAYER_COLORS[selectedColorIndex] ?? PLAYER_COLORS[0];
+
   const validateNickname = (): boolean => {
     const trimmed = nickname.trim();
     if (!trimmed) {
@@ -66,14 +73,14 @@ export function LandingPage({
     e.preventDefault();
     if (!validateNickname() || submitting || isConnecting) return;
     setSubmitting(true);
-    onPlay(AVATAR_LIST[selectedAvatarIndex]);
+    onPlay(currentColor.hex);
     setTimeout(() => setSubmitting(false), 2000);
   };
 
   const handlePrivateSubmit = () => {
     if (!validateNickname() || submitting || isConnecting) return;
     setSubmitting(true);
-    onCreatePrivate(AVATAR_LIST[selectedAvatarIndex]);
+    onCreatePrivate(currentColor.hex);
     setTimeout(() => setSubmitting(false), 2000);
   };
 
@@ -85,14 +92,15 @@ export function LandingPage({
     }
     const cleanCode = joinCodeInput.trim().toUpperCase();
     if (!cleanCode) return;
-    onJoinByCode(cleanCode, AVATAR_LIST[selectedAvatarIndex]);
+    onJoinByCode(cleanCode, currentColor.hex);
   };
 
-  const cycleAvatar = (direction: 1 | -1) => {
-    setSelectedAvatarIndex((prev) => {
-      const next = prev + direction;
-      if (next < 0) return AVATAR_LIST.length - 1;
-      return next % AVATAR_LIST.length;
+  const cycleColor = (direction: 1 | -1) => {
+    setSelectedColorIndex((prev) => {
+      let next = prev + direction;
+      if (next < 0) next = PLAYER_COLORS.length - 1;
+      else if (next >= PLAYER_COLORS.length) next = 0;
+      return next;
     });
   };
 
@@ -133,7 +141,7 @@ export function LandingPage({
           <h1 className="landing-brand-title">
             CHARCHOKKHA<span className="brand-dot-io">.IO</span>
           </h1>
-          <p className="landing-brand-tagline">Rule the economy</p>
+          <p className="landing-brand-tagline">Oyyy May be bhuul kheltaseee</p>
         </header>
 
         {/* Server Connection Error Alert */}
@@ -146,31 +154,87 @@ export function LandingPage({
 
         {/* Main Entry Card */}
         <div className="landing-card-surface">
-          {/* Avatar / Token Selector */}
-          <div className="landing-avatar-picker" aria-label="Select player token">
-            <button
-              type="button"
-              className="avatar-arrow-btn"
-              onClick={() => cycleAvatar(-1)}
-              title="Previous token"
-              aria-label="Previous token"
-            >
-              ‹
-            </button>
-            <div className="avatar-preview-ring" title="Your game piece">
-              <span className="avatar-emoji">{AVATAR_LIST[selectedAvatarIndex]}</span>
+          {/* Animated Human-Like Character & Color Picker */}
+          <div className="landing-character-picker" aria-label="Select player character and color">
+            <div className="character-preview-stage">
+              <button
+                type="button"
+                className="avatar-arrow-btn"
+                onClick={() => cycleColor(-1)}
+                title="Previous character color"
+                aria-label="Previous character color"
+              >
+                ‹
+              </button>
+              <div
+                className="character-preview-ring"
+                style={{
+                  borderColor: currentColor.hex,
+                  boxShadow: `0 0 20px ${currentColor.hex}66`,
+                }}
+                title={`Selected: ${currentColor.name}`}
+              >
+                <PlayerCharacter
+                  color={currentColor.hex}
+                  size={46}
+                  isSelected
+                  showGlow
+                />
+              </div>
+              <button
+                type="button"
+                className="avatar-arrow-btn"
+                onClick={() => cycleColor(1)}
+                title="Next character color"
+                aria-label="Next character color"
+              >
+                ›
+              </button>
             </div>
-            <button
-              type="button"
-              className="avatar-arrow-btn"
-              onClick={() => cycleAvatar(1)}
-              title="Next token"
-              aria-label="Next token"
-            >
-              ›
-            </button>
+            <div className="character-name-badge" style={{ color: currentColor.hex }}>
+              {currentColor.name}
+            </div>
+
+            {/* 8-Color Palette Row / Grid */}
+            <div className="character-palette-row" role="radiogroup" aria-label="Player Colors">
+              {PLAYER_COLORS.map((col, idx) => {
+                const isSelected = idx === selectedColorIndex;
+                const isTaken = takenColors.some(
+                  (tc) => tc.toLowerCase() === col.hex.toLowerCase()
+                );
+                return (
+                  <button
+                    key={col.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={isSelected}
+                    disabled={isTaken}
+                    className={`character-swatch-chip ${isSelected ? 'chip-active' : ''} ${
+                      isTaken ? 'chip-taken' : ''
+                    }`}
+                    onClick={() => !isTaken && setSelectedColorIndex(idx)}
+                    title={isTaken ? `${col.name} (Occupied)` : col.name}
+                    aria-label={`${col.name}${isTaken ? ' (taken)' : ''}`}
+                    style={
+                      {
+                        '--swatch-color': col.hex,
+                        borderColor: isSelected ? col.hex : 'transparent',
+                        boxShadow: isSelected ? `0 0 10px ${col.hex}88` : undefined,
+                      } as React.CSSProperties
+                    }
+                  >
+                    <PlayerCharacter
+                      color={col.hex}
+                      size={22}
+                      isTaken={isTaken}
+                      isSelected={isSelected}
+                    />
+                  </button>
+                );
+              })}
+            </div>
           </div>
-          <div className="avatar-hint-text">Choose your game piece</div>
+          <div className="avatar-hint-text">Choose your game character & color</div>
 
           {/* Nickname Form */}
           <form className="landing-form" onSubmit={handlePlaySubmit}>
@@ -329,7 +393,7 @@ export function LandingPage({
                 />
               </div>
 
-              <div className="dialog-btn-row">
+              <div className="dialog-action-buttons-row">
                 <button
                   type="button"
                   className="btn-secondary-action"
@@ -337,30 +401,36 @@ export function LandingPage({
                 >
                   Cancel
                 </button>
-                {onSpectateByCode && (
-                  <button
-                    id="btn-spectate-code"
-                    type="button"
-                    className="btn-secondary-action btn-spectate-modal-btn"
-                    disabled={!joinCodeInput.trim()}
-                    onClick={() => {
-                      const cleanCode = joinCodeInput.trim().toUpperCase();
-                      if (cleanCode) onSpectateByCode(cleanCode);
-                    }}
-                    title="Watch game as a read-only spectator"
-                  >
-                    <span>👁️ Spectate</span>
-                  </button>
-                )}
                 <button
-                  id="btn-submit-join-code"
+                  id="btn-confirm-join"
                   type="submit"
                   className="btn-primary-action"
                   disabled={!joinCodeInput.trim()}
                 >
-                  Join Table →
+                  Join Table
                 </button>
               </div>
+
+              {onSpectateByCode && (
+                <div className="dialog-spectate-option">
+                  <span className="spectate-divider-text">or</span>
+                  <button
+                    type="button"
+                    id="btn-spectate-code"
+                    className="btn-ghost-action btn-spectate-direct"
+                    disabled={!joinCodeInput.trim()}
+                    onClick={() => {
+                      const clean = joinCodeInput.trim().toUpperCase();
+                      if (clean) {
+                        setShowJoinModal(false);
+                        onSpectateByCode(clean);
+                      }
+                    }}
+                  >
+                    <span>👁️ Spectate Table Instead</span>
+                  </button>
+                </div>
+              )}
             </form>
           </div>
         </div>

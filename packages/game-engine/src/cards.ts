@@ -94,7 +94,7 @@ export const TREASURE_CARDS: GameCard[] = [
     deck: 'treasure',
     text: 'Go directly to Prison. Do not pass START, do not collect $200.',
     apply: (state, playerId) => {
-      state.players[playerId].position = 10;
+      state.players[playerId].position = 12;
       state.players[playerId].inPrison = true;
       state.players[playerId].prisonTurns = 0;
       state.turnPhase = 'turn_ended';
@@ -148,15 +148,15 @@ export const CHANCE_CARDS: GameCard[] = [
   {
     id: 'chance_5',
     deck: 'chance',
-    text: 'Advance to Paris. If you pass START, collect $200.',
+    text: 'Advance to Ghuna. If you pass START, collect $200.',
     apply: (state, playerId) => {
       const oldPos = state.players[playerId].position;
-      const targetPos = 29; // Paris
+      const targetPos = 34; // Ghuna
       if (targetPos < oldPos) {
         state.players[playerId].cash += state.startingSalary;
       }
       state.players[playerId].position = targetPos;
-      return 'Advanced to Paris.';
+      return 'Advanced to Ghuna.';
     },
   },
   {
@@ -164,7 +164,7 @@ export const CHANCE_CARDS: GameCard[] = [
     deck: 'chance',
     text: 'Go directly to Prison. Do not pass START, do not collect $200.',
     apply: (state, playerId) => {
-      state.players[playerId].position = 10;
+      state.players[playerId].position = 12;
       state.players[playerId].inPrison = true;
       state.players[playerId].prisonTurns = 0;
       state.turnPhase = 'turn_ended';
