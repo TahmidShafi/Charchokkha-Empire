@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import {
   BOARD_SPACES,
   getSpaceBadge,
+  formatTileDisplayName,
   type BoardSpace,
 } from '../boardData';
 import { getBoardSpace, getGroupSpaces, hasColorMonopoly } from '@charchokkha/game-engine';
@@ -526,7 +527,7 @@ export function Board({
         >
           <div className="corner-content-box">
             {cornerIcon ? <span className="corner-icon-symbol" aria-hidden="true">{cornerIcon}</span> : null}
-            <span className="corner-primary-label">{space.name}</span>
+            <span className="corner-primary-label">{formatTileDisplayName(space)}</span>
             {space.subtext ? <span className="corner-sub-caption">{space.subtext}</span> : null}
           </div>
 
@@ -555,9 +556,7 @@ export function Board({
 
     const inwardPositionClass = `inward-edge-${coords.edge}`;
     const isAirport = space.type === 'airport';
-    const tileDisplayName = isAirport
-      ? space.name.replace(/\s*airport\s*/i, '').trim()
-      : space.name;
+    const tileDisplayName = formatTileDisplayName(space);
 
     const tileStyle: React.CSSProperties = {
       ...(isInsideTrack
@@ -864,17 +863,6 @@ export function Board({
             </div>
           </div>
 
-          {/* Interactive Event Feedback Pill */}
-          {recentEventAlert && (
-            <div
-              className={`courtyard-event-feedback-pill event-pill-${recentEventAlert.type}`}
-              role="status"
-              aria-live="polite"
-            >
-              <span className="event-pill-text">{formatEventMessage(recentEventAlert.text)}</span>
-            </div>
-          )}
-
           {/* Contextual Action Buttons */}
           <div className="courtyard-action-controls">
             {isSpectator ? (
@@ -1045,6 +1033,17 @@ export function Board({
               </div>
             )}
           </div>
+
+          {/* Interactive Event Feedback Pill */}
+          {recentEventAlert && (
+            <div
+              className={`courtyard-event-feedback-pill event-pill-${recentEventAlert.type}`}
+              role="status"
+              aria-live="polite"
+            >
+              <span className="event-pill-text">{formatEventMessage(recentEventAlert.text)}</span>
+            </div>
+          )}
 
           {/* Pending Trade Notification Banner */}
           {gameState?.pendingTrade && gameState.pendingTrade.receiverId === currentSessionId && (

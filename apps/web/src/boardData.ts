@@ -106,4 +106,33 @@ export function getSpaceDisplayName(spaceId: number, customNames?: Record<number
   return space.name;
 }
 
+/**
+ * Concise display label for perimeter board tiles.
+ * Provides clean, legible visual formatting on compact mobile tiles while preserving
+ * full canonical names in game engine data, modals, and accessibility labels.
+ */
+export function formatTileDisplayName(space: BoardSpace): string {
+  if (space.type === 'airport') {
+    return space.name.replace(/\s*airport\s*/i, '').trim();
+  }
+
+  // Selective visual abbreviations for exceptionally long names to prevent awkward breaks
+  switch (space.name) {
+    case 'Rahattarpool':
+      return 'Rahattar';
+    case 'Desi Fresh Factory':
+      return 'Desi Fresh';
+    case 'Bhai Bhai Tiles':
+      return 'Bhai Bhai';
+    case '7 dayz Chap Station':
+      return '7 Dayz Chap';
+    case 'Kukichin Camp':
+      return 'Kukichin';
+    case 'Utshob Rehab Center':
+      return 'Utshob Rehab';
+    default:
+      return space.name;
+  }
+}
+
 export const BOARD_SPACES: BoardSpace[] = CANONICAL_BOARD_SPACES;

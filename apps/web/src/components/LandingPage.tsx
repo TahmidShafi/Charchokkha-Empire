@@ -297,6 +297,7 @@ export function LandingPage({
               type="button"
               className="btn-secondary-action"
               onClick={() => setShowJoinModal(true)}
+              disabled={isConnecting || submitting}
             >
               <span className="btn-icon">🚪</span>
               <span>Join Room</span>
@@ -307,6 +308,7 @@ export function LandingPage({
               type="button"
               className="btn-secondary-action"
               onClick={handlePrivateSubmit}
+              disabled={isConnecting || submitting}
             >
               <span className="btn-icon">🔒</span>
               <span>Private Room</span>

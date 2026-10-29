@@ -321,4 +321,87 @@ describe('Milestone 2 — Real Multiplayer Room Foundation Suite', () => {
 
     reconnectedClient.disconnect();
   });
+
+  it('supports invite links case-insensitively: guest can join using lowercase room code', async () => {
+    // Create a new room with capacity for 4 players
+    const hostPayload = {
+      nickname: 'Invite Host',
+      settings: { maxPlayers: 4, isPrivate: true },
+    };
+
+    const hostAck = await new Promise<SocketAck<RoomSnapshot>>((resolve) => {
+      client1.emit(SOCKET_EVENTS.ROOM_CREATE, hostPayload, (res: SocketAck<RoomSnapshot>) => {
+        resolve(res);
+      });
+    });
+
+    expect(hostAck.ok).toBe(true);
+    if (!hostAck.ok) return;
+
+    const createdRoomCode = hostAck.data.code;
+    const lowercaseCode = createdRoomCode.toLowerCase();
+
+    // Connect a fresh guest client
+    const inviteGuest = Client(serverUrl, {
+      transports: ['websocket'],
+      reconnection: false,
+    });
+    await new Promise<void>((resolve) => inviteGuest.on('connect', () => resolve()));
+
+    // Guest joins using lowercase code and omits color (as an invite link does)
+    const joinAck = await new Promise<SocketAck<RoomSnapshot>>((resolve) => {
+      inviteGuest.emit(
+        SOCKET_EVENTS.ROOM_JOIN,
+        {
+          roomCode: lowercaseCode,
+          nickname: 'Invite Guest Player',
+        },
+        (res: SocketAck<RoomSnapshot>) => {
+          resolve(res);
+        }
+      );
+    });
+
+    expect(joinAck.ok).toBe(true);
+    if (joinAck.ok) {
+      expect(joinAck.data.code).toBe(createdRoomCode);
+      const joinedGuest = joinAck.data.players.find((p) => p.nickname === 'Invite Guest Player');
+      expect(joinedGuest).toBeDefined();
+      expect(joinedGuest?.color).toBeDefined();
+      // Ensure guest color does not collide with host color
+      const hostColor = joinAck.data.players.find((p) => p.isHost)?.color;
+      expect(joinedGuest?.color).not.toBe(hostColor);
+    }
+
+    inviteGuest.disconnect();
+  });
+
+  it('returns ROOM_NOT_FOUND when joining with nonexistent or expired room code', async () => {
+    const inviteGuest = Client(serverUrl, {
+      transports: ['websocket'],
+      reconnection: false,
+    });
+    await new Promise<void>((resolve) => inviteGuest.on('connect', () => resolve()));
+
+    const joinAck = await new Promise<SocketAck<RoomSnapshot>>((resolve) => {
+      inviteGuest.emit(
+        SOCKET_EVENTS.ROOM_JOIN,
+        {
+          roomCode: 'NONEXIST9',
+          nickname: 'Lost Guest',
+        },
+        (res: SocketAck<RoomSnapshot>) => {
+          resolve(res);
+        }
+      );
+    });
+
+    expect(joinAck.ok).toBe(false);
+    if (!joinAck.ok) {
+      expect(joinAck.error.code).toBe('ROOM_NOT_FOUND');
+      expect(joinAck.error.message).toContain('Room NONEXIST9 does not exist');
+    }
+
+    inviteGuest.disconnect();
+  });
 });

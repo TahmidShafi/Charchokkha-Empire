@@ -10,6 +10,7 @@ import {
 import { LandingPage } from './components/LandingPage';
 import { GameRoom } from './components/GameRoom';
 import { type ChatMessage } from './components/ChatPanel';
+import { parseInviteRoomCode } from './utils/inviteLink';
 
 type AppScreen = 'landing' | 'room';
 
@@ -18,7 +19,26 @@ export default function App() {
   const [nickname, setNickname] = useState('Hateful Escape');
   const [roomSnapshot, setRoomSnapshot] = useState<RoomSnapshot | null>(null);
   const [currentSessionId, setCurrentSessionId] = useState<string>('');
-  const [serverError, setServerError] = useState<string>('');
+  const [pendingInviteRoom, setPendingInviteRoom] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      const isMock = new URLSearchParams(window.location.search).get('mock') === '1';
+      if (!isMock) {
+        const parsed = parseInviteRoomCode(window.location.search);
+        if (parsed.code) return parsed.code;
+      }
+    }
+    return null;
+  });
+  const [serverError, setServerError] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const isMock = new URLSearchParams(window.location.search).get('mock') === '1';
+      if (!isMock) {
+        const parsed = parseInviteRoomCode(window.location.search);
+        if (parsed.error) return parsed.error;
+      }
+    }
+    return '';
+  });
   const [connectionStatus, setConnectionStatus] = useState<
     'connected' | 'connecting' | 'reconnecting' | 'disconnected'
   >('connecting');
@@ -26,6 +46,17 @@ export default function App() {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
 
   const lastSequenceRef = useRef<number>(0);
+  const pendingInviteRoomRef = useRef<string | null>(pendingInviteRoom);
+  const hasAttemptedInviteJoinRef = useRef<boolean>(false);
+  const nicknameRef = useRef<string>(nickname);
+
+  useEffect(() => {
+    pendingInviteRoomRef.current = pendingInviteRoom;
+  }, [pendingInviteRoom]);
+
+  useEffect(() => {
+    nicknameRef.current = nickname;
+  }, [nickname]);
 
   useEffect(() => {
     if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('mock') === '1') {
@@ -138,6 +169,58 @@ export default function App() {
     s.on(SOCKET_EVENTS.SESSION_AUTHENTICATED, (auth: SessionAuthenticatedPayload) => {
       localStorage.setItem('charchokkha_guest_token', auth.token);
       setCurrentSessionId(auth.sessionId);
+
+      const targetRoom = pendingInviteRoomRef.current;
+      if (!targetRoom || hasAttemptedInviteJoinRef.current) {
+        return;
+      }
+
+      // If session was already in this room, server automatically sent/sends ROOM_SNAPSHOT
+      if (auth.currentRoomCode && auth.currentRoomCode.toUpperCase() === targetRoom.toUpperCase()) {
+        hasAttemptedInviteJoinRef.current = true;
+        setPendingInviteRoom(null);
+        pendingInviteRoomRef.current = null;
+        return;
+      }
+
+      // Prevent duplicate join requests across re-renders or socket events
+      hasAttemptedInviteJoinRef.current = true;
+
+      s.emit(
+        SOCKET_EVENTS.ROOM_JOIN,
+        {
+          roomCode: targetRoom,
+          nickname: nicknameRef.current.trim() || 'Player',
+        },
+        (ack: SocketAck<RoomSnapshot>) => {
+          setPendingInviteRoom(null);
+          pendingInviteRoomRef.current = null;
+
+          if (!ack.ok) {
+            setServerError(ack.error.message || `Failed to join room ${targetRoom}.`);
+            if (typeof window !== 'undefined' && window.history?.replaceState) {
+              window.history.replaceState({}, document.title, window.location.pathname);
+            }
+            return;
+          }
+
+          lastSequenceRef.current = ack.data.sequenceNumber;
+          setRoomSnapshot(ack.data);
+          setChatMessages([
+            {
+              id: `init_${Date.now()}`,
+              sender: 'System',
+              text: `Joined table ${ack.data.code} via invite link.`,
+              isSystem: true,
+            },
+          ]);
+          setScreen('room');
+
+          if (typeof window !== 'undefined' && window.history?.replaceState) {
+            window.history.replaceState({}, document.title, window.location.pathname);
+          }
+        }
+      );
     });
 
     // 2. Authoritative room snapshot
@@ -146,6 +229,8 @@ export default function App() {
         return; // Stale snapshot ignored
       }
       lastSequenceRef.current = snapshot.sequenceNumber;
+      setPendingInviteRoom(null);
+      pendingInviteRoomRef.current = null;
       setRoomSnapshot(snapshot);
       setScreen('room');
     });
@@ -367,6 +452,8 @@ export default function App() {
     }
     setRoomSnapshot(null);
     setChatMessages([]);
+    setPendingInviteRoom(null);
+    pendingInviteRoomRef.current = null;
     setScreen('landing');
   };
 
@@ -414,6 +501,7 @@ export default function App() {
           onJoinByCode={handleJoinByCode}
           onSpectateByCode={handleSpectateByCode}
           serverError={serverError}
+          isConnecting={Boolean(pendingInviteRoom)}
         />
       ) : (
         <GameRoom
