@@ -184,6 +184,54 @@ export function GameRoom({
     );
   };
 
+  const handleAddBot = (count = 1) => {
+    if (!socket || !isHost || isSubmittingAction) return;
+    setIsSubmittingAction(true);
+    socket.emit(
+      SOCKET_EVENTS.ROOM_BOT_ADD,
+      { roomCode, count },
+      (ack: SocketAck<RoomSnapshot>) => {
+        setIsSubmittingAction(false);
+        if (!ack?.ok) {
+          // eslint-disable-next-line no-console
+          console.error('Failed to add bot:', ack?.error?.message);
+        }
+      }
+    );
+  };
+
+  const handleRemoveBot = (botPlayerId: string) => {
+    if (!socket || !isHost || isSubmittingAction) return;
+    setIsSubmittingAction(true);
+    socket.emit(
+      SOCKET_EVENTS.ROOM_BOT_REMOVE,
+      { roomCode, botPlayerId },
+      (ack: SocketAck<RoomSnapshot>) => {
+        setIsSubmittingAction(false);
+        if (!ack?.ok) {
+          // eslint-disable-next-line no-console
+          console.error('Failed to remove bot:', ack?.error?.message);
+        }
+      }
+    );
+  };
+
+  const handleSetBotSpeed = (speed: 'normal' | 'slow') => {
+    if (!socket || !isHost || isSubmittingAction) return;
+    setIsSubmittingAction(true);
+    socket.emit(
+      SOCKET_EVENTS.ROOM_BOT_SET_SPEED,
+      { roomCode, speed },
+      (ack: SocketAck<RoomSnapshot>) => {
+        setIsSubmittingAction(false);
+        if (!ack?.ok) {
+          // eslint-disable-next-line no-console
+          console.error('Failed to set bot speed:', ack?.error?.message);
+        }
+      }
+    );
+  };
+
   // Authoritative Game Actions
   const handleStartGame = () => {
     if (!socket || !isHost || isSubmittingAction) return;
@@ -660,7 +708,7 @@ export function GameRoom({
                 className={`player-roster-card ${isTurn ? 'card-is-active-turn' : ''} ${isMe ? 'card-is-self' : ''}`}
               >
                 <div className="player-roster-avatar-wrap">
-                  <PlayerCharacter color={p.color || '#C4E64A'} size={28} showGlow={isMe} />
+                  <PlayerCharacter color={p.color || '#C4E64A'} size={24} showGlow={false} />
                   {p.isHost && (
                     <span className="player-host-crown" title="Room Host">👑</span>
                   )}
@@ -669,6 +717,7 @@ export function GameRoom({
                 <div className="player-roster-info-stack">
                   <div className="player-name-row">
                     <span className="roster-name-truncate">{p.nickname}</span>
+                    {p.isBot && <span className="bot-self-chip">🤖 BOT</span>}
                     {isMe && <span className="you-self-chip">You</span>}
                   </div>
                   <div className="player-balance-row">
@@ -769,6 +818,9 @@ export function GameRoom({
                 onStartingCashChange={handleUpdateStartingCash}
                 settings={roomSnapshot.settings}
                 onUpdateSettings={handleUpdateSettings}
+                onAddBot={handleAddBot}
+                onRemoveBot={handleRemoveBot}
+                onSetBotSpeed={handleSetBotSpeed}
                 gameState={roomSnapshot.gameState}
                 isMuted={isMuted}
                 onToggleMute={handleToggleMute}
@@ -783,6 +835,8 @@ export function GameRoom({
             <GameSettings
               playerName={playerName}
               playerAvatar={currentAvatar}
+              playerColor={currentPlayer?.color || '#C4E64A'}
+              onColorChange={handleSelectColor}
               isHost={isHost}
               isSpectator={isSpectator}
               players={roomSnapshot.players}
@@ -797,6 +851,9 @@ export function GameRoom({
               onStartingCashChange={handleUpdateStartingCash}
               settings={roomSnapshot.settings}
               onUpdateSettings={handleUpdateSettings}
+              onAddBot={handleAddBot}
+              onRemoveBot={handleRemoveBot}
+              onSetBotSpeed={handleSetBotSpeed}
               gameState={roomSnapshot.gameState}
               isMuted={isMuted}
               onToggleMute={handleToggleMute}

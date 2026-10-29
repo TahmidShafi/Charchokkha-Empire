@@ -1,12 +1,15 @@
 import http from 'node:http';
 import { Server as SocketIOServer, type Socket } from 'socket.io';
 import {
+  AddBotPayloadSchema,
   ChatMessageBroadcastSchema,
   CreateRoomPayloadSchema,
   GetSnapshotPayloadSchema,
   HealthCheckResponseSchema,
   JoinRoomPayloadSchema,
+  RemoveBotPayloadSchema,
   SelectColorPayloadSchema,
+  SetBotSpeedPayloadSchema,
   SpectateRoomPayloadSchema,
   LeaveRoomPayloadSchema,
   PingPayloadSchema,
@@ -39,6 +42,7 @@ import {
   type SocketError,
 } from '@charchokkha/shared';
 import { RoomManager } from './roomManager.js';
+import { BotCoordinator } from './botCoordinator.js';
 import { serverMetrics } from './metrics.js';
 
 export interface ServerOptions {
@@ -121,6 +125,34 @@ export function createAppServer(options: ServerOptions = {}) {
     },
     maxHttpBufferSize: 1e6, // 1MB maximum inbound payload size
   });
+
+  const botCoordinator = new BotCoordinator(roomManager);
+
+  const broadcastRoom = (snapshot: RoomSnapshot) => {
+    io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.ROOM_UPDATED, snapshot);
+    if (snapshot.gameState) {
+      io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.GAME_STATE_UPDATED, {
+        roomCode: snapshot.code,
+        sequenceNumber: snapshot.sequenceNumber,
+        gameState: snapshot.gameState,
+      });
+    }
+  };
+
+  const notifyRoomUpdated = (snapshot: RoomSnapshot) => {
+    broadcastRoom(snapshot);
+    const room = roomManager.getRoom(snapshot.code);
+    if (room && room.state === 'in_progress') {
+      botCoordinator.onRoomStateUpdated(room, broadcastRoom);
+    }
+  };
+
+  // Resume bot coordination for any in-progress rooms restored from disk
+  for (const room of roomManager.getAllRooms()) {
+    if (room.state === 'in_progress') {
+      botCoordinator.onRoomStateUpdated(room, broadcastRoom);
+    }
+  }
 
   io.on('connection', (socket: Socket) => {
     // 1. Authenticate guest session from handshake auth
@@ -443,7 +475,7 @@ export function createAppServer(options: ServerOptions = {}) {
           }
 
           if (snapshot) {
-            io.to(`room:${leftCode}`).emit(SOCKET_EVENTS.ROOM_UPDATED, snapshot);
+            notifyRoomUpdated(snapshot);
             if (wasSpectator) {
               io.to(`room:${leftCode}`).emit(SOCKET_EVENTS.ROOM_SPECTATOR_LEFT, {
                 spectatorId: session.sessionId,
@@ -456,6 +488,8 @@ export function createAppServer(options: ServerOptions = {}) {
                 nickname: session.nickname,
               });
             }
+          } else {
+            botCoordinator.clearRoom(leftCode);
           }
         } catch {
           if (typeof ack === 'function') ack({ ok: true, data: { leftCode: targetCode } });
@@ -494,11 +528,125 @@ export function createAppServer(options: ServerOptions = {}) {
             ack({ ok: true, data: updatedSnapshot });
           }
 
-          io.to(`room:${updatedSnapshot.code}`).emit(SOCKET_EVENTS.ROOM_UPDATED, updatedSnapshot);
+          notifyRoomUpdated(updatedSnapshot);
         } catch (error: unknown) {
           serverMetrics.recordAction(performance.now() - actionStart, false, false, true);
           const msg = error instanceof Error ? error.message : 'Failed to update settings';
           const code = (msg.includes('host') || msg.includes('Spectator') || msg.includes('not permitted')) ? 'FORBIDDEN' : 'SETTINGS_UPDATE_FAILED';
+          const err: SocketError = { code, message: msg };
+          if (typeof ack === 'function') ack({ ok: false, error: err });
+        }
+      }
+    );
+
+    // --- Room: Add Bot (Host Only, Private Waiting Room Only) ---
+    socket.on(
+      SOCKET_EVENTS.ROOM_BOT_ADD,
+      async (rawPayload: unknown, ack?: (response: SocketAck<RoomSnapshot>) => void) => {
+        const parsed = AddBotPayloadSchema.safeParse(rawPayload);
+        if (!parsed.success) {
+          const err: SocketError = {
+            code: 'INVALID_PAYLOAD',
+            message: 'Validation failed: ' + parsed.error.issues.map((i) => i.message).join(', '),
+            details: parsed.error.flatten(),
+          };
+          if (typeof ack === 'function') ack({ ok: false, error: err });
+          return;
+        }
+
+        const roomCode = parsed.data.roomCode.trim().toUpperCase();
+        try {
+          const { result: snapshot } = await roomManager.enqueueRoomAction(
+            roomCode,
+            () => roomManager.addBot(session, roomCode, parsed.data.count)
+          );
+
+          if (typeof ack === 'function') {
+            ack({ ok: true, data: snapshot });
+          }
+
+          notifyRoomUpdated(snapshot);
+        } catch (error: unknown) {
+          const msg = error instanceof Error ? error.message : 'Failed to add bot';
+          const code = (msg.includes('host') || msg.includes('Spectator') || msg.includes('not permitted'))
+            ? 'FORBIDDEN'
+            : 'BOT_ADD_FAILED';
+          const err: SocketError = { code, message: msg };
+          if (typeof ack === 'function') ack({ ok: false, error: err });
+        }
+      }
+    );
+
+    // --- Room: Remove Bot (Host Only) ---
+    socket.on(
+      SOCKET_EVENTS.ROOM_BOT_REMOVE,
+      async (rawPayload: unknown, ack?: (response: SocketAck<RoomSnapshot>) => void) => {
+        const parsed = RemoveBotPayloadSchema.safeParse(rawPayload);
+        if (!parsed.success) {
+          const err: SocketError = {
+            code: 'INVALID_PAYLOAD',
+            message: 'Validation failed: ' + parsed.error.issues.map((i) => i.message).join(', '),
+            details: parsed.error.flatten(),
+          };
+          if (typeof ack === 'function') ack({ ok: false, error: err });
+          return;
+        }
+
+        const roomCode = parsed.data.roomCode.trim().toUpperCase();
+        try {
+          const { result: snapshot } = await roomManager.enqueueRoomAction(
+            roomCode,
+            () => roomManager.removeBot(session, roomCode, parsed.data.botPlayerId)
+          );
+
+          if (typeof ack === 'function') {
+            ack({ ok: true, data: snapshot });
+          }
+
+          notifyRoomUpdated(snapshot);
+        } catch (error: unknown) {
+          const msg = error instanceof Error ? error.message : 'Failed to remove bot';
+          const code = (msg.includes('host') || msg.includes('Spectator') || msg.includes('not permitted'))
+            ? 'FORBIDDEN'
+            : 'BOT_REMOVE_FAILED';
+          const err: SocketError = { code, message: msg };
+          if (typeof ack === 'function') ack({ ok: false, error: err });
+        }
+      }
+    );
+
+    // --- Room: Set Bot Speed (Host Only) ---
+    socket.on(
+      SOCKET_EVENTS.ROOM_BOT_SET_SPEED,
+      async (rawPayload: unknown, ack?: (response: SocketAck<RoomSnapshot>) => void) => {
+        const parsed = SetBotSpeedPayloadSchema.safeParse(rawPayload);
+        if (!parsed.success) {
+          const err: SocketError = {
+            code: 'INVALID_PAYLOAD',
+            message: 'Validation failed: ' + parsed.error.issues.map((i) => i.message).join(', '),
+            details: parsed.error.flatten(),
+          };
+          if (typeof ack === 'function') ack({ ok: false, error: err });
+          return;
+        }
+
+        const roomCode = parsed.data.roomCode.trim().toUpperCase();
+        try {
+          const { result: snapshot } = await roomManager.enqueueRoomAction(
+            roomCode,
+            () => roomManager.setBotSpeed(session, roomCode, parsed.data.speed)
+          );
+
+          if (typeof ack === 'function') {
+            ack({ ok: true, data: snapshot });
+          }
+
+          notifyRoomUpdated(snapshot);
+        } catch (error: unknown) {
+          const msg = error instanceof Error ? error.message : 'Failed to set bot speed';
+          const code = (msg.includes('host') || msg.includes('Spectator') || msg.includes('not permitted'))
+            ? 'FORBIDDEN'
+            : 'BOT_SET_SPEED_FAILED';
           const err: SocketError = { code, message: msg };
           if (typeof ack === 'function') ack({ ok: false, error: err });
         }
@@ -561,14 +709,7 @@ export function createAppServer(options: ServerOptions = {}) {
             ack({ ok: true, data: snapshot });
           }
 
-          io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.ROOM_UPDATED, snapshot);
-          if (snapshot.gameState) {
-            io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.GAME_STATE_UPDATED, {
-              roomCode: snapshot.code,
-              sequenceNumber: snapshot.sequenceNumber,
-              gameState: snapshot.gameState,
-            });
-          }
+          notifyRoomUpdated(snapshot);
         } catch (error: unknown) {
           serverMetrics.recordAction(performance.now() - actionStart, false, false, true);
           const msg = error instanceof Error ? error.message : 'Failed to start game';
@@ -613,7 +754,7 @@ export function createAppServer(options: ServerOptions = {}) {
             ack({ ok: true, data: snapshot });
           }
 
-          io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.ROOM_UPDATED, snapshot);
+          notifyRoomUpdated(snapshot);
         } catch (error: unknown) {
           serverMetrics.recordAction(performance.now() - actionStart, false, false, true);
           const msg = error instanceof Error ? error.message : 'Failed to initiate rematch';
@@ -656,14 +797,7 @@ export function createAppServer(options: ServerOptions = {}) {
             ack({ ok: true, data: snapshot });
           }
 
-          io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.ROOM_UPDATED, snapshot);
-          if (snapshot.gameState) {
-            io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.GAME_STATE_UPDATED, {
-              roomCode: snapshot.code,
-              sequenceNumber: snapshot.sequenceNumber,
-              gameState: snapshot.gameState,
-            });
-          }
+          notifyRoomUpdated(snapshot);
         } catch (error: unknown) {
           serverMetrics.recordAction(performance.now() - actionStart, false, false, true);
           const msg = error instanceof Error ? error.message : 'Failed to roll dice';
@@ -709,14 +843,7 @@ export function createAppServer(options: ServerOptions = {}) {
             ack({ ok: true, data: snapshot });
           }
 
-          io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.ROOM_UPDATED, snapshot);
-          if (snapshot.gameState) {
-            io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.GAME_STATE_UPDATED, {
-              roomCode: snapshot.code,
-              sequenceNumber: snapshot.sequenceNumber,
-              gameState: snapshot.gameState,
-            });
-          }
+          notifyRoomUpdated(snapshot);
         } catch (error: unknown) {
           serverMetrics.recordAction(performance.now() - actionStart, false, false, true);
           const msg = error instanceof Error ? error.message : 'Failed to purchase property';
@@ -760,14 +887,7 @@ export function createAppServer(options: ServerOptions = {}) {
           serverMetrics.recordAction(performance.now() - actionStart, true, isDuplicate);
 
           if (typeof ack === 'function') ack({ ok: true, data: snapshot });
-          io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.ROOM_UPDATED, snapshot);
-          if (snapshot.gameState) {
-            io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.GAME_STATE_UPDATED, {
-              roomCode: snapshot.code,
-              sequenceNumber: snapshot.sequenceNumber,
-              gameState: snapshot.gameState,
-            });
-          }
+          notifyRoomUpdated(snapshot);
         } catch (error: unknown) {
           serverMetrics.recordAction(performance.now() - actionStart, false, false, true);
           const msg = error instanceof Error ? error.message : 'Failed to decline property';
@@ -806,14 +926,7 @@ export function createAppServer(options: ServerOptions = {}) {
           serverMetrics.recordAction(performance.now() - actionStart, true, isDuplicate);
 
           if (typeof ack === 'function') ack({ ok: true, data: snapshot });
-          io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.ROOM_UPDATED, snapshot);
-          if (snapshot.gameState) {
-            io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.GAME_STATE_UPDATED, {
-              roomCode: snapshot.code,
-              sequenceNumber: snapshot.sequenceNumber,
-              gameState: snapshot.gameState,
-            });
-          }
+          notifyRoomUpdated(snapshot);
         } catch (error: unknown) {
           serverMetrics.recordAction(performance.now() - actionStart, false, false, true);
           const msg = error instanceof Error ? error.message : 'Failed to place auction bid';
@@ -852,14 +965,7 @@ export function createAppServer(options: ServerOptions = {}) {
           serverMetrics.recordAction(performance.now() - actionStart, true, isDuplicate);
 
           if (typeof ack === 'function') ack({ ok: true, data: snapshot });
-          io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.ROOM_UPDATED, snapshot);
-          if (snapshot.gameState) {
-            io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.GAME_STATE_UPDATED, {
-              roomCode: snapshot.code,
-              sequenceNumber: snapshot.sequenceNumber,
-              gameState: snapshot.gameState,
-            });
-          }
+          notifyRoomUpdated(snapshot);
         } catch (error: unknown) {
           serverMetrics.recordAction(performance.now() - actionStart, false, false, true);
           const msg = error instanceof Error ? error.message : 'Failed to pass auction';
@@ -898,14 +1004,7 @@ export function createAppServer(options: ServerOptions = {}) {
           serverMetrics.recordAction(performance.now() - actionStart, true, isDuplicate);
 
           if (typeof ack === 'function') ack({ ok: true, data: snapshot });
-          io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.ROOM_UPDATED, snapshot);
-          if (snapshot.gameState) {
-            io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.GAME_STATE_UPDATED, {
-              roomCode: snapshot.code,
-              sequenceNumber: snapshot.sequenceNumber,
-              gameState: snapshot.gameState,
-            });
-          }
+          notifyRoomUpdated(snapshot);
         } catch (error: unknown) {
           serverMetrics.recordAction(performance.now() - actionStart, false, false, true);
           const msg = error instanceof Error ? error.message : 'Failed to pay prison fine';
@@ -944,14 +1043,7 @@ export function createAppServer(options: ServerOptions = {}) {
           serverMetrics.recordAction(performance.now() - actionStart, true, isDuplicate);
 
           if (typeof ack === 'function') ack({ ok: true, data: snapshot });
-          io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.ROOM_UPDATED, snapshot);
-          if (snapshot.gameState) {
-            io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.GAME_STATE_UPDATED, {
-              roomCode: snapshot.code,
-              sequenceNumber: snapshot.sequenceNumber,
-              gameState: snapshot.gameState,
-            });
-          }
+          notifyRoomUpdated(snapshot);
         } catch (error: unknown) {
           serverMetrics.recordAction(performance.now() - actionStart, false, false, true);
           const msg = error instanceof Error ? error.message : 'Failed to mortgage property';
@@ -990,14 +1082,7 @@ export function createAppServer(options: ServerOptions = {}) {
           serverMetrics.recordAction(performance.now() - actionStart, true, isDuplicate);
 
           if (typeof ack === 'function') ack({ ok: true, data: snapshot });
-          io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.ROOM_UPDATED, snapshot);
-          if (snapshot.gameState) {
-            io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.GAME_STATE_UPDATED, {
-              roomCode: snapshot.code,
-              sequenceNumber: snapshot.sequenceNumber,
-              gameState: snapshot.gameState,
-            });
-          }
+          notifyRoomUpdated(snapshot);
         } catch (error: unknown) {
           serverMetrics.recordAction(performance.now() - actionStart, false, false, true);
           const msg = error instanceof Error ? error.message : 'Failed to unmortgage property';
@@ -1036,14 +1121,7 @@ export function createAppServer(options: ServerOptions = {}) {
           serverMetrics.recordAction(performance.now() - actionStart, true, isDuplicate);
 
           if (typeof ack === 'function') ack({ ok: true, data: snapshot });
-          io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.ROOM_UPDATED, snapshot);
-          if (snapshot.gameState) {
-            io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.GAME_STATE_UPDATED, {
-              roomCode: snapshot.code,
-              sequenceNumber: snapshot.sequenceNumber,
-              gameState: snapshot.gameState,
-            });
-          }
+          notifyRoomUpdated(snapshot);
         } catch (error: unknown) {
           serverMetrics.recordAction(performance.now() - actionStart, false, false, true);
           const msg = error instanceof Error ? error.message : 'Failed to build house';
@@ -1082,14 +1160,7 @@ export function createAppServer(options: ServerOptions = {}) {
           serverMetrics.recordAction(performance.now() - actionStart, true, isDuplicate);
 
           if (typeof ack === 'function') ack({ ok: true, data: snapshot });
-          io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.ROOM_UPDATED, snapshot);
-          if (snapshot.gameState) {
-            io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.GAME_STATE_UPDATED, {
-              roomCode: snapshot.code,
-              sequenceNumber: snapshot.sequenceNumber,
-              gameState: snapshot.gameState,
-            });
-          }
+          notifyRoomUpdated(snapshot);
         } catch (error: unknown) {
           serverMetrics.recordAction(performance.now() - actionStart, false, false, true);
           const msg = error instanceof Error ? error.message : 'Failed to sell house';
@@ -1134,14 +1205,7 @@ export function createAppServer(options: ServerOptions = {}) {
           serverMetrics.recordAction(performance.now() - actionStart, true, isDuplicate);
 
           if (typeof ack === 'function') ack({ ok: true, data: snapshot });
-          io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.ROOM_UPDATED, snapshot);
-          if (snapshot.gameState) {
-            io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.GAME_STATE_UPDATED, {
-              roomCode: snapshot.code,
-              sequenceNumber: snapshot.sequenceNumber,
-              gameState: snapshot.gameState,
-            });
-          }
+          notifyRoomUpdated(snapshot);
         } catch (error: unknown) {
           serverMetrics.recordAction(performance.now() - actionStart, false, false, true);
           const msg = error instanceof Error ? error.message : 'Failed to create trade offer';
@@ -1180,14 +1244,7 @@ export function createAppServer(options: ServerOptions = {}) {
           serverMetrics.recordAction(performance.now() - actionStart, true, isDuplicate);
 
           if (typeof ack === 'function') ack({ ok: true, data: snapshot });
-          io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.ROOM_UPDATED, snapshot);
-          if (snapshot.gameState) {
-            io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.GAME_STATE_UPDATED, {
-              roomCode: snapshot.code,
-              sequenceNumber: snapshot.sequenceNumber,
-              gameState: snapshot.gameState,
-            });
-          }
+          notifyRoomUpdated(snapshot);
         } catch (error: unknown) {
           serverMetrics.recordAction(performance.now() - actionStart, false, false, true);
           const msg = error instanceof Error ? error.message : 'Failed to accept trade offer';
@@ -1226,14 +1283,7 @@ export function createAppServer(options: ServerOptions = {}) {
           serverMetrics.recordAction(performance.now() - actionStart, true, isDuplicate);
 
           if (typeof ack === 'function') ack({ ok: true, data: snapshot });
-          io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.ROOM_UPDATED, snapshot);
-          if (snapshot.gameState) {
-            io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.GAME_STATE_UPDATED, {
-              roomCode: snapshot.code,
-              sequenceNumber: snapshot.sequenceNumber,
-              gameState: snapshot.gameState,
-            });
-          }
+          notifyRoomUpdated(snapshot);
         } catch (error: unknown) {
           serverMetrics.recordAction(performance.now() - actionStart, false, false, true);
           const msg = error instanceof Error ? error.message : 'Failed to reject trade offer';
@@ -1272,14 +1322,7 @@ export function createAppServer(options: ServerOptions = {}) {
           serverMetrics.recordAction(performance.now() - actionStart, true, isDuplicate);
 
           if (typeof ack === 'function') ack({ ok: true, data: snapshot });
-          io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.ROOM_UPDATED, snapshot);
-          if (snapshot.gameState) {
-            io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.GAME_STATE_UPDATED, {
-              roomCode: snapshot.code,
-              sequenceNumber: snapshot.sequenceNumber,
-              gameState: snapshot.gameState,
-            });
-          }
+          notifyRoomUpdated(snapshot);
         } catch (error: unknown) {
           serverMetrics.recordAction(performance.now() - actionStart, false, false, true);
           const msg = error instanceof Error ? error.message : 'Failed to declare bankruptcy';
@@ -1321,14 +1364,7 @@ export function createAppServer(options: ServerOptions = {}) {
             ack({ ok: true, data: snapshot });
           }
 
-          io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.ROOM_UPDATED, snapshot);
-          if (snapshot.gameState) {
-            io.to(`room:${snapshot.code}`).emit(SOCKET_EVENTS.GAME_STATE_UPDATED, {
-              roomCode: snapshot.code,
-              sequenceNumber: snapshot.sequenceNumber,
-              gameState: snapshot.gameState,
-            });
-          }
+          notifyRoomUpdated(snapshot);
         } catch (error: unknown) {
           serverMetrics.recordAction(performance.now() - actionStart, false, false, true);
           const msg = error instanceof Error ? error.message : 'Failed to end turn';
@@ -1375,7 +1411,7 @@ export function createAppServer(options: ServerOptions = {}) {
     socket.on('disconnect', () => {
       const result = roomManager.handleSocketDisconnect(socket.id);
       if (result?.snapshot && result.roomCode) {
-        io.to(`room:${result.roomCode}`).emit(SOCKET_EVENTS.ROOM_UPDATED, result.snapshot);
+        notifyRoomUpdated(result.snapshot);
       }
       // eslint-disable-next-line no-console
       console.log(`[Socket.IO] Client disconnected: socket_id=${socket.id}`);
@@ -1394,6 +1430,9 @@ export function createAppServer(options: ServerOptions = {}) {
 
   const stop = (): Promise<void> => {
     return new Promise((resolve) => {
+      for (const room of roomManager.getAllRooms()) {
+        botCoordinator.clearRoom(room.code);
+      }
       io.close(() => {
         httpServer.close(() => {
           resolve();
@@ -1406,6 +1445,7 @@ export function createAppServer(options: ServerOptions = {}) {
     httpServer,
     io,
     roomManager,
+    botCoordinator,
     start,
     stop,
   };

@@ -10,6 +10,86 @@ import { soundManager } from '../audio/soundManager';
 import { PlayerCharacter } from './PlayerCharacter';
 import { calculateStepPath, prefersReducedMotion } from '../utils/tokenMovement';
 
+/**
+ * Concise event message formatter for the central courtyard notification banner and ticker.
+ * Transforms verbose engine action logs into compact, professional game telemetry strings.
+ */
+export function formatEventMessage(msg: string): string {
+  if (!msg) return '';
+
+  // Purchase: "Purchased Chattogram for $200"
+  const buyMatch = msg.match(/Purchased\s+(.+?)\s+for\s+\$(\d+)/i);
+  if (buyMatch) {
+    return `${buyMatch[1]} · Bought for $${buyMatch[2]}`;
+  }
+
+  // Rent: "Player landed on Saint Martin. Owned by p2. Paid $50 rent." or "Paid $50 to Bob for rent on Saint Martin"
+  const rentMatch =
+    msg.match(/landed on\s+(.+?)\..*?Paid\s+\$(\d+)\s+rent/i) ||
+    msg.match(/Paid\s+\$(\d+)\s+(?:to\s+.+?\s+)?for rent on\s+(.+)/i);
+  if (rentMatch) {
+    const isFirstNum = !isNaN(Number(rentMatch[1]));
+    const prop = isFirstNum ? rentMatch[2] : rentMatch[1];
+    const amount = isFirstNum ? rentMatch[1] : rentMatch[2];
+    return `${prop} · Rent paid $${amount}`;
+  }
+
+  // Tax: "Player landed on Earnings Tax. Paid $100 in tax." or "Paid $100 for Earnings Tax"
+  const taxMatch =
+    msg.match(/landed on\s+(.+?)\..*?Paid\s+\$(\d+)\s+in tax/i) ||
+    msg.match(/Paid\s+\$(\d+)\s+(?:for|in)\s+(.+?)(?:\.|$)/i);
+  if (taxMatch) {
+    const isFirstNum = !isNaN(Number(taxMatch[1]));
+    const taxName = isFirstNum ? taxMatch[2] : taxMatch[1];
+    const amount = isFirstNum ? taxMatch[1] : taxMatch[2];
+    return `${taxName} · Paid $${amount}`;
+  }
+
+  // Vacation pot: "Collected $150 from Vacation cash pot!"
+  const vacMatch = msg.match(/Collected\s+\$(\d+)\s+from Vacation/i);
+  if (vacMatch) {
+    return `Vacation Pot · +$${vacMatch[1]}`;
+  }
+
+  // Rehab / Prison
+  if (msg.includes('Rolled double') && msg.includes('Freed from prison')) {
+    return 'Freed from Prison (Doubles!)';
+  }
+  if (msg.includes('fine to leave prison') || msg.includes('freed from prison')) {
+    return 'Paid $50 Fine · Freed';
+  }
+  if (msg.includes('Arrested') || msg.includes('In Prison') || msg.includes('Rehab')) {
+    return 'Rehab Center · Arrested';
+  }
+
+  // Auction ended
+  const auctionMatch = msg.match(/Auction for\s+(.+?)\s+ended!\s+(.+?)\s+won with\s+\$(\d+)/i);
+  if (auctionMatch) {
+    return `Auction: ${auctionMatch[1]} · ${auctionMatch[2]} ($${auctionMatch[3]})`;
+  }
+
+  // Trade completed
+  if (msg.includes('Trade completed')) {
+    return 'Trade Completed ✓';
+  }
+
+  // Salary
+  const goMatch = msg.match(/Collected\s+\$(\d+)\s+salary/i);
+  if (goMatch) {
+    return `START · +$${goMatch[1]}`;
+  }
+
+  // Declined property
+  const declineMatch = msg.match(/chose not to buy\s+(.+?)(?:\.|$)/i);
+  if (declineMatch) {
+    return `${declineMatch[1]} · Declined`;
+  }
+
+  // Default cleanup: strip "Player landed on "
+  const cleaned = msg.replace(/^Player landed on\s+/i, '').trim();
+  return cleaned.length > 44 ? `${cleaned.slice(0, 42)}…` : cleaned;
+}
+
 export interface BoardProps {
   roomCode: string;
   roomSnapshot: RoomSnapshot;
@@ -791,7 +871,7 @@ export function Board({
               role="status"
               aria-live="polite"
             >
-              <span className="event-pill-text">{recentEventAlert.text}</span>
+              <span className="event-pill-text">{formatEventMessage(recentEventAlert.text)}</span>
             </div>
           )}
 
@@ -995,11 +1075,11 @@ export function Board({
             </div>
           )}
 
-          {/* Action Log Message Ticker (suppress duplicate purchase message) */}
-          {gameState?.lastActionMessage && !gameState.lastActionMessage.startsWith('Purchased') && (
+          {/* Action Log Message Ticker (suppress duplicate purchase message, and avoid displaying when recentEventAlert is active) */}
+          {!recentEventAlert && gameState?.lastActionMessage && !gameState.lastActionMessage.startsWith('Purchased') && !gameState.lastActionMessage.includes('Available to buy') && (
             <div className="courtyard-action-ticker" aria-live="polite">
               <span className="ticker-dot" aria-hidden="true">•</span>
-              <span className="ticker-text">{gameState.lastActionMessage}</span>
+              <span className="ticker-text">{formatEventMessage(gameState.lastActionMessage)}</span>
             </div>
           )}
 

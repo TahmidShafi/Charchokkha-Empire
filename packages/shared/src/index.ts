@@ -20,6 +20,9 @@ export const SOCKET_EVENTS = {
   ROOM_LEAVE: 'room:leave',
   ROOM_UPDATE_SETTINGS: 'room:update_settings',
   ROOM_GET_SNAPSHOT: 'room:get_snapshot',
+  ROOM_BOT_ADD: 'room:bot_add',
+  ROOM_BOT_REMOVE: 'room:bot_remove',
+  ROOM_BOT_SET_SPEED: 'room:bot_set_speed',
 
   // Room updates (Server -> Client)
   ROOM_SNAPSHOT: 'room:snapshot',
@@ -159,6 +162,7 @@ export const PlayerSchema = z.object({
   isHost: z.boolean(),
   connected: z.boolean(),
   seatIndex: z.number().int().nonnegative(),
+  isBot: z.boolean().optional(),
 });
 
 export type Player = z.infer<typeof PlayerSchema>;
@@ -167,6 +171,7 @@ export const RoomSettingsSchema = z.object({
   maxPlayers: z.number().int().min(2).max(8).default(4),
   isPrivate: z.boolean().default(true),
   allowBots: z.boolean().default(false),
+  botSpeed: z.enum(['normal', 'slow']).optional(),
   startingCash: z.number().int().min(500).max(5000).default(1500),
   doubleRent: z.boolean().default(true),
   vacationCash: z.boolean().default(false),
@@ -383,6 +388,30 @@ export const GetSnapshotPayloadSchema = z.object({
 });
 
 export type GetSnapshotPayload = z.infer<typeof GetSnapshotPayloadSchema>;
+
+export const AddBotPayloadSchema = z.object({
+  roomCode: z.string().trim().min(3).max(10),
+  count: z.number().int().min(1).max(7).default(1),
+  requestId: z.string().trim().min(1).max(64).optional(),
+});
+
+export type AddBotPayload = z.infer<typeof AddBotPayloadSchema>;
+
+export const RemoveBotPayloadSchema = z.object({
+  roomCode: z.string().trim().min(3).max(10),
+  botPlayerId: z.string().trim().min(1),
+  requestId: z.string().trim().min(1).max(64).optional(),
+});
+
+export type RemoveBotPayload = z.infer<typeof RemoveBotPayloadSchema>;
+
+export const SetBotSpeedPayloadSchema = z.object({
+  roomCode: z.string().trim().min(3).max(10),
+  speed: z.enum(['normal', 'slow']),
+  requestId: z.string().trim().min(1).max(64).optional(),
+});
+
+export type SetBotSpeedPayload = z.infer<typeof SetBotSpeedPayloadSchema>;
 
 // Action Payloads: Game
 export const RematchPayloadSchema = z.object({

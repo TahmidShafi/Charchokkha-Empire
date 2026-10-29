@@ -60,7 +60,8 @@ export class RoomPersistenceManager {
         }
         return {
           ...p,
-          connected: false, // On restart, marked disconnected until client reconnects
+          connected: p.isBot ? true : false,
+          isBot: !!p.isBot,
           token,
         };
       });
@@ -186,7 +187,8 @@ export class RoomPersistenceManager {
               avatar: p.avatar,
               color: p.color || PLAYER_COLOR_HEXES[p.seatIndex % 8],
               isHost: p.isHost,
-              connected: false, // Wait for socket reconnection
+              connected: p.isBot ? true : false, // Bots remain active on restart
+              isBot: !!p.isBot,
               seatIndex: p.seatIndex,
               joinedAt: p.joinedAt,
             });

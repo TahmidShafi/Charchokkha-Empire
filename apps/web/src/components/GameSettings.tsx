@@ -21,6 +21,9 @@ export interface GameSettingsProps {
   onStartingCashChange: (val: number) => void;
   settings?: RoomSettings;
   onUpdateSettings?: (partial: Partial<RoomSettings>) => void;
+  onAddBot?: (count?: number) => void;
+  onRemoveBot?: (botPlayerId: string) => void;
+  onSetBotSpeed?: (speed: 'normal' | 'slow') => void;
   gameState?: GameState;
   isMuted?: boolean;
   onToggleMute?: () => void;
@@ -46,6 +49,9 @@ export function GameSettings({
   onStartingCashChange,
   settings,
   onUpdateSettings,
+  onAddBot,
+  onRemoveBot,
+  onSetBotSpeed,
   gameState,
   isMuted = false,
   onToggleMute,
@@ -57,6 +63,13 @@ export function GameSettings({
   const noRentInPrison = settings?.noRentInPrison ?? false;
   const mortgage = settings?.mortgage ?? true;
   const evenBuild = settings?.evenBuild ?? true;
+  const botSpeed = settings?.botSpeed ?? 'normal';
+
+  const humanCount = players.filter((p) => !p.isBot).length;
+  const botCount = players.filter((p) => p.isBot).length;
+  const isFull = players.length >= maxPlayers;
+  const isWaiting = !gameState || gameState.phase === 'waiting';
+  const isGameEnded = gameState?.phase === 'finished';
 
   return (
     <div className="settings-panel-container" role="region" aria-label="Game Settings">
@@ -215,7 +228,10 @@ export function GameSettings({
                     <span className="roster-nickname">
                       {p.nickname} {p.nickname === playerName && '(You)'}
                     </span>
-                    {!p.connected && (
+                    {p.isBot && (
+                      <span className="bot-pill-badge" title="Automated Test Bot">🤖 Bot</span>
+                    )}
+                    {!p.connected && !p.isBot && (
                       <span className="reconnecting-tag">(reconnecting...)</span>
                     )}
                   </div>
@@ -230,12 +246,139 @@ export function GameSettings({
                     {p.isHost && (
                       <span className="host-mini-crown" title="Room Host">👑</span>
                     )}
+                    {isHost && isPrivate && p.isBot && onRemoveBot && !isGameEnded && (
+                      <button
+                        type="button"
+                        className="btn-remove-bot-inline"
+                        onClick={() => onRemoveBot(p.id)}
+                        title={`Remove ${p.nickname}`}
+                        aria-label={`Remove bot ${p.nickname}`}
+                      >
+                        ✕
+                      </button>
+                    )}
                   </div>
                 </div>
               );
             })}
           </div>
         </div>
+
+        {/* Card: Test Bots (QA Management) - Private Room Host Only */}
+        {isHost && isPrivate && (
+          <div className="settings-section-card test-bots-section-card">
+            <div className="section-card-header">
+              <span className="section-title-label">🤖 Test Bots (QA)</span>
+              <span className="test-room-badge">Private Table</span>
+            </div>
+
+            <div className="bot-stats-row">
+              <div className="bot-stat-item">
+                <span className="bot-stat-num">{humanCount}</span>
+                <span className="bot-stat-lbl">Humans</span>
+              </div>
+              <div className="bot-stat-divider">/</div>
+              <div className="bot-stat-item">
+                <span className="bot-stat-num">{botCount}</span>
+                <span className="bot-stat-lbl">Bots</span>
+              </div>
+              <div className="bot-stat-divider">/</div>
+              <div className="bot-stat-item">
+                <span className="bot-stat-num">{players.length}/{maxPlayers}</span>
+                <span className="bot-stat-lbl">Capacity</span>
+              </div>
+            </div>
+
+            {/* Add Bot Action Buttons */}
+            {isWaiting && (
+              <div className="bot-action-buttons-grid">
+                <button
+                  type="button"
+                  id="btn-add-one-bot"
+                  className="btn-bot-action btn-add-bot"
+                  disabled={isFull || !onAddBot}
+                  onClick={() => onAddBot?.(1)}
+                  aria-label="Add 1 Bot"
+                >
+                  <span>🤖 +1 Bot</span>
+                </button>
+                <button
+                  type="button"
+                  id="btn-fill-bots"
+                  className="btn-bot-action btn-fill-bots"
+                  disabled={isFull || !onAddBot}
+                  onClick={() => onAddBot?.(maxPlayers - players.length)}
+                  aria-label="Fill Available Seats with Bots"
+                >
+                  <span>⚡ Fill Seats ({Math.max(0, maxPlayers - players.length)})</span>
+                </button>
+              </div>
+            )}
+
+            {!isWaiting && !isGameEnded && (
+              <div className="bot-game-active-note">
+                <span>🤖 Match running. Bots take authoritative turns automatically.</span>
+              </div>
+            )}
+
+            {/* Observation Speed Mode */}
+            <div className="setting-control-row bot-speed-control-row">
+              <div className="setting-text-block">
+                <div className="setting-label-title">Observation Speed</div>
+                <div className="setting-label-desc">Pace of bot turns and decisions</div>
+              </div>
+              <div className="bot-speed-toggle-group" role="radiogroup" aria-label="Bot Speed">
+                <button
+                  type="button"
+                  className={`btn-speed-option ${botSpeed === 'normal' ? 'speed-active' : ''}`}
+                  onClick={() => onSetBotSpeed?.('normal')}
+                  aria-checked={botSpeed === 'normal'}
+                  role="radio"
+                >
+                  Normal (750ms)
+                </button>
+                <button
+                  type="button"
+                  className={`btn-speed-option ${botSpeed === 'slow' ? 'speed-active' : ''}`}
+                  onClick={() => onSetBotSpeed?.('slow')}
+                  aria-checked={botSpeed === 'slow'}
+                  role="radio"
+                  title="Slow mode (2.5s) for observing animations"
+                >
+                  Slow (2.5s)
+                </button>
+              </div>
+            </div>
+
+            {/* Active Bots Chip List */}
+            {botCount > 0 && (
+              <div className="active-bots-list-container">
+                <div className="active-bots-header">
+                  <span>Configured Bots ({botCount})</span>
+                </div>
+                <div className="active-bots-chips">
+                  {players.filter((p) => p.isBot).map((bot) => (
+                    <div key={bot.id} className="active-bot-chip">
+                      <PlayerCharacter color={bot.color || '#C4E64A'} size={18} />
+                      <span className="bot-chip-name">{bot.nickname}</span>
+                      {onRemoveBot && !isGameEnded && (
+                        <button
+                          type="button"
+                          className="btn-remove-bot-chip"
+                          onClick={() => onRemoveBot(bot.id)}
+                          title={`Remove ${bot.nickname}`}
+                          aria-label={`Remove bot ${bot.nickname}`}
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Card 3: Room Configuration (Host Controlled) */}
         <div className="settings-section-card">

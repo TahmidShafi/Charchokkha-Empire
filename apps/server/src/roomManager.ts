@@ -528,18 +528,18 @@ export class RoomManager {
     session.isSpectator = false;
     room.sequenceNumber += 1;
 
-    // If host left, migrate host to next active player
+    // If host left, migrate host to next active human player (bots must never become host)
+    const remainingHumans = Array.from(room.players.values()).filter((p) => !p.isBot);
     if (room.hostSessionId === session.sessionId) {
-      const remainingPlayers = Array.from(room.players.values());
-      const nextHost = remainingPlayers.find((p) => p.connected) ?? remainingPlayers[0];
+      const nextHost = remainingHumans.find((p) => p.connected) ?? remainingHumans[0];
       if (nextHost) {
         room.hostSessionId = nextHost.sessionId;
         nextHost.isHost = true;
       }
     }
 
-    // If room is empty of players, mark abandoned
-    if (room.players.size === 0) {
+    // If room is empty of human players, mark abandoned (bots cannot hold a room alone)
+    if (remainingHumans.length === 0) {
       room.state = 'abandoned';
       this.persistence.deleteRoom(code);
       return { leftCode: code, abandoned: true };
@@ -646,6 +646,185 @@ export class RoomManager {
   }
 
   /**
+   * Host-only: Adds one or multiple AI test bots to a private room.
+   */
+  public addBot(session: GuestSession, roomCode: string, count: number = 1): RoomSnapshot {
+    const code = roomCode.trim().toUpperCase();
+    const room = this.rooms.get(code);
+    if (!room) {
+      throw new Error(`Room not found: ${code}`);
+    }
+
+    this.ensureSeatedPlayer(room, session);
+
+    if (room.hostSessionId !== session.sessionId) {
+      throw new Error('Only the room host can add bots');
+    }
+
+    if (!room.settings.isPrivate) {
+      throw new Error('Test bots are only permitted in private rooms');
+    }
+
+    if (room.state !== 'waiting') {
+      throw new Error(`Cannot add bots while room is ${room.state}`);
+    }
+
+    const maxPlayers = room.settings.maxPlayers;
+    const availableSlots = maxPlayers - room.players.size;
+    if (availableSlots <= 0) {
+      throw new Error('Room is at maximum capacity');
+    }
+
+    const toAdd = Math.min(Math.max(1, count), availableSlots);
+    const BOT_NAMES = [
+      'Robo Tycoon',
+      'Byte Baron',
+      'Algo Investor',
+      'Cyber Mogul',
+      'Pixel Capitalist',
+      'Quantum Trader',
+      'Silicon Boss',
+      'Matrix Magnate',
+    ];
+
+    const currentNicknames = new Set(Array.from(room.players.values()).map((p) => p.nickname.toLowerCase()));
+    const takenColors = new Set(
+      Array.from(room.players.values()).map((p) => p.color?.toLowerCase()).filter(Boolean)
+    );
+    const takenSeats = new Set(Array.from(room.players.values()).map((p) => p.seatIndex));
+
+    for (let i = 0; i < toAdd; i++) {
+      let nextSeat = 0;
+      while (takenSeats.has(nextSeat)) {
+        nextSeat++;
+      }
+      takenSeats.add(nextSeat);
+
+      const chosenColor = PLAYER_COLOR_HEXES.find((c) => !takenColors.has(c.toLowerCase())) || PLAYER_COLOR_HEXES[nextSeat % 8];
+      takenColors.add(chosenColor.toLowerCase());
+
+      let botName = BOT_NAMES.find((n) => !currentNicknames.has(n.toLowerCase()));
+      if (!botName) {
+        botName = `Bot ${nextSeat + 1}`;
+      }
+      currentNicknames.add(botName.toLowerCase());
+
+      const botId = `bot_${randomUUID().slice(0, 8)}`;
+      const botPlayer: ServerPlayer = {
+        id: botId,
+        sessionId: botId,
+        nickname: botName,
+        avatar: '🤖',
+        color: chosenColor,
+        isHost: false,
+        connected: true,
+        seatIndex: nextSeat,
+        isBot: true,
+        joinedAt: Date.now(),
+      };
+
+      room.players.set(botId, botPlayer);
+    }
+
+    room.sequenceNumber += 1;
+    this.persistence.saveRoom(room, this.sessionsByToken);
+    return this.toSnapshot(room);
+  }
+
+  /**
+   * Host-only: Removes an AI test bot from the room.
+   */
+  public removeBot(session: GuestSession, roomCode: string, botPlayerId: string): RoomSnapshot {
+    const code = roomCode.trim().toUpperCase();
+    const room = this.rooms.get(code);
+    if (!room) {
+      throw new Error(`Room not found: ${code}`);
+    }
+
+    this.ensureSeatedPlayer(room, session);
+
+    if (room.hostSessionId !== session.sessionId) {
+      throw new Error('Only the room host can remove bots');
+    }
+
+    const botPlayer = room.players.get(botPlayerId);
+    if (!botPlayer || !botPlayer.isBot) {
+      throw new Error('Specified player is not a removable test bot');
+    }
+
+    if (room.state === 'waiting') {
+      room.players.delete(botPlayerId);
+      room.sequenceNumber += 1;
+      this.persistence.saveRoom(room, this.sessionsByToken);
+      return this.toSnapshot(room);
+    }
+
+    if (room.state === 'in_progress' && room.gameState) {
+      const result = processDeclareBankruptcy(room.gameState, botPlayerId);
+      if (result.success) {
+        room.gameState = result.state;
+        if (result.state.phase === 'finished') {
+          room.state = 'finished';
+        }
+      }
+      room.players.delete(botPlayerId);
+      room.sequenceNumber += 1;
+      this.persistence.saveRoom(room, this.sessionsByToken);
+      return this.toSnapshot(room);
+    }
+
+    throw new Error(`Cannot remove bot in status ${room.state}`);
+  }
+
+  /**
+   * Host-only: Configures bot execution speed ('normal' vs 'slow').
+   */
+  public setBotSpeed(session: GuestSession, roomCode: string, speed: 'normal' | 'slow'): RoomSnapshot {
+    const code = roomCode.trim().toUpperCase();
+    const room = this.rooms.get(code);
+    if (!room) {
+      throw new Error(`Room not found: ${code}`);
+    }
+
+    this.ensureSeatedPlayer(room, session);
+
+    if (room.hostSessionId !== session.sessionId) {
+      throw new Error('Only the room host can change bot speed');
+    }
+
+    room.settings.botSpeed = speed;
+    room.sequenceNumber += 1;
+    this.persistence.saveRoom(room, this.sessionsByToken);
+    return this.toSnapshot(room);
+  }
+
+  /**
+   * Returns a virtual GuestSession for an active bot player so it can execute authoritative game actions
+   */
+  public getBotSession(roomCode: string, botPlayerId: string): GuestSession {
+    const code = roomCode.trim().toUpperCase();
+    const room = this.rooms.get(code);
+    if (!room) {
+      throw new Error(`Room not found: ${code}`);
+    }
+    const botPlayer = room.players.get(botPlayerId);
+    if (!botPlayer || !botPlayer.isBot) {
+      throw new Error(`Bot player not found: ${botPlayerId}`);
+    }
+    return {
+      sessionId: botPlayerId,
+      token: '',
+      nickname: botPlayer.nickname,
+      avatar: botPlayer.avatar,
+      socketId: '',
+      connected: true,
+      currentRoomCode: code,
+      createdAt: botPlayer.joinedAt,
+      lastActiveAt: Date.now(),
+    };
+  }
+
+  /**
    * Retrieves public room snapshot. Never leaks tokens or private keys.
    */
   public getSnapshot(roomCode: string): RoomSnapshot {
@@ -659,6 +838,10 @@ export class RoomManager {
 
   public getRoom(roomCode: string): ServerRoom | undefined {
     return this.rooms.get(roomCode.trim().toUpperCase());
+  }
+
+  public getAllRooms(): ServerRoom[] {
+    return Array.from(this.rooms.values());
   }
 
   /**
@@ -1191,6 +1374,7 @@ export class RoomManager {
       isHost: p.isHost,
       connected: p.connected,
       seatIndex: p.seatIndex,
+      isBot: !!p.isBot,
     }));
 
     let safeGameState: SharedGameState | undefined = undefined;
