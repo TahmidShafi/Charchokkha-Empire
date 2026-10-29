@@ -351,6 +351,13 @@ describe('Mobile CSS Stylesheet Integrity Verification', () => {
     expect(css).toMatch(/\.settings-scroll-content\s*\{[^}]*padding:[^}]*env\(safe-area-inset-bottom/);
   });
 
+  it('ensures settings cards and test bots card do not shrink or collapse in flex containers', () => {
+    expect(css).toMatch(/\.settings-section-card\s*\{[^}]*flex-shrink:\s*0/);
+    expect(css).toMatch(/\.test-bots-section-card\s*\{[^}]*flex-shrink:\s*0/);
+    expect(css).toMatch(/\.test-bots-section-card\s*\{[^}]*min-height:\s*max-content/);
+    expect(css).toMatch(/\.test-bots-section-card\s*\{[^}]*overflow:\s*visible/);
+  });
+
   it('preserves desktop board tabletop grid rules (> 1024px)', () => {
     expect(css).toMatch(/@media \(min-width:\s*1440px\)/);
   });

@@ -2290,6 +2290,7 @@ button:disabled {
   display: flex;
   flex-direction: column;
   gap: 0.6rem;
+  flex-shrink: 0;
 }
 
 .section-card-header {
@@ -4326,7 +4327,9 @@ button:disabled {
   border: 1px solid rgba(168, 85, 247, 0.35);
   background: linear-gradient(180deg, rgba(39, 20, 68, 0.8) 0%, rgba(26, 12, 46, 0.85) 100%);
   position: relative;
-  overflow: hidden;
+  overflow: visible;
+  flex-shrink: 0;
+  min-height: max-content;
 }
 
 .test-bots-section-card::before {
@@ -4337,6 +4340,8 @@ button:disabled {
   right: 0;
   height: 2px;
   background: linear-gradient(90deg, #a855f7, #6366f1);
+  border-top-left-radius: inherit;
+  border-top-right-radius: inherit;
 }
 
 .test-room-badge {

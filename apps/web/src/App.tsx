@@ -60,16 +60,19 @@ export default function App() {
 
   useEffect(() => {
     if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('mock') === '1') {
+      const urlParams = new URLSearchParams(window.location.search);
+      const isPrivateMock = urlParams.get('private') === '1';
+      const isWaitingMock = urlParams.get('waiting') === '1';
       const mockSnap: RoomSnapshot = {
         code: 'TABLE1',
         hostId: 'p1',
-        state: 'in_progress',
+        state: isWaitingMock ? 'waiting' : 'in_progress',
         sequenceNumber: 10,
         createdAt: Date.now(),
         settings: {
           maxPlayers: 4,
-          isPrivate: false,
-          allowBots: false,
+          isPrivate: isPrivateMock,
+          allowBots: isPrivateMock,
           startingCash: 1500,
           doubleRent: true,
           vacationCash: true,
@@ -84,7 +87,7 @@ export default function App() {
           { id: 'p3', nickname: 'Charlie', avatar: '🐱', color: '#559BD6', isHost: false, connected: true, seatIndex: 2 },
           { id: 'p4', nickname: 'Diana', avatar: '🚀', color: '#FF8738', isHost: false, connected: true, seatIndex: 3 },
         ],
-        gameState: {
+        gameState: isWaitingMock ? undefined : {
           phase: 'in_progress',
           turnOrder: ['p1', 'p2', 'p3', 'p4'],
           currentTurnIndex: 0,
