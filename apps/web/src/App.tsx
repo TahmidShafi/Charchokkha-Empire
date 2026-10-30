@@ -11,6 +11,7 @@ import { LandingPage } from './components/LandingPage';
 import { GameRoom } from './components/GameRoom';
 import { type ChatMessage } from './components/ChatPanel';
 import { parseInviteRoomCode } from './utils/inviteLink';
+import { AlertCircleIcon, AlertTriangleIcon, RefreshIcon } from './components/Icons';
 
 type AppScreen = 'landing' | 'room';
 
@@ -311,7 +312,7 @@ export default function App() {
         {
           id: `spec_join_${Date.now()}_${Math.random()}`,
           sender: 'System',
-          text: `👁️ ${data.nickname} is now spectating this table.`,
+          text: `${data.nickname} is now spectating this table.`,
           isSystem: true,
         },
       ]);
@@ -323,7 +324,7 @@ export default function App() {
         {
           id: `spec_leave_${Date.now()}_${Math.random()}`,
           sender: 'System',
-          text: `👁️ ${data.nickname} left spectator mode.`,
+          text: `${data.nickname} left spectator mode.`,
           isSystem: true,
         },
       ]);
@@ -441,7 +442,7 @@ export default function App() {
           {
             id: `init_${Date.now()}`,
             sender: 'System',
-            text: `👁️ Spectating table ${ack.data.code} in real-time. Actions are read-only.`,
+            text: `Spectating table ${ack.data.code} in real-time. Actions are read-only.`,
             isSystem: true,
           },
         ]);
@@ -471,11 +472,17 @@ export default function App() {
       {connectionStatus !== 'connected' && (
         <div className="network-status-banner" role="status" aria-live="polite">
           {connectionStatus === 'reconnecting' && (
-            <span>⚠️ Network interrupted — reconnecting to match...</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <AlertTriangleIcon size={15} />
+              <span>Network interrupted — reconnecting to match...</span>
+            </span>
           )}
           {connectionStatus === 'disconnected' && (
             <div className="network-status-disconnected-row">
-              <span>❌ Disconnected from server.</span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <AlertCircleIcon size={15} />
+                <span>Disconnected from server.</span>
+              </span>
               <button
                 type="button"
                 className="btn-network-reconnect"
@@ -487,12 +494,16 @@ export default function App() {
                   }
                 }}
               >
-                Reconnect 🔄
+                <span>Reconnect</span>
+                <RefreshIcon size={13} style={{ marginLeft: 6 }} />
               </button>
             </div>
           )}
           {connectionStatus === 'connecting' && screen === 'room' && (
-            <span>🔄 Synchronizing with table...</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <RefreshIcon size={14} className="spinning-sync-icon" />
+              <span>Synchronizing with table...</span>
+            </span>
           )}
         </div>
       )}

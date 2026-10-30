@@ -10,6 +10,17 @@ import { type Player, type PropertyRecord, type RoomSnapshot } from '@charchokkh
 import { soundManager } from '../audio/soundManager';
 import { PlayerCharacter } from './PlayerCharacter';
 import { calculateStepPath, prefersReducedMotion } from '../utils/tokenMovement';
+import {
+  TrophyIcon,
+  CartIcon,
+  TradeIcon,
+  BankruptIcon,
+  LockIcon,
+  UnlockIcon,
+  EyeIcon,
+  CheckIcon,
+  CloseIcon,
+} from './Icons';
 
 /**
  * Concise event message formatter for the central courtyard notification banner and ticker.
@@ -806,7 +817,7 @@ export function Board({
           {/* Winner Celebration Banner */}
           {isGameFinished && (
             <div className="courtyard-victory-banner" role="status">
-              <span className="victory-trophy-icon" aria-hidden="true">🏆</span>
+              <TrophyIcon size={24} className="victory-trophy-icon" />
               <div className="victory-text-stack">
                 <span className="victory-headline">GAME OVER</span>
                 <span className="victory-winner-name">
@@ -818,7 +829,8 @@ export function Board({
                     className="btn-courtyard-results"
                     onClick={onShowResults}
                   >
-                    View Standings & Stats 🏆
+                    <span>View Standings & Stats</span>
+                    <TrophyIcon size={14} style={{ marginLeft: 6 }} />
                   </button>
                 )}
               </div>
@@ -828,7 +840,6 @@ export function Board({
           {/* Vacation Pot Indicator */}
           {roomSnapshot.settings.vacationCash && isGameStarted && !isGameFinished && (
             <div className="courtyard-vacation-pot-pill" title="Vacation Cash Pot">
-              <span aria-hidden="true">🌴</span>
               <span>Vacation Pot: <strong>${gameState?.vacationPot ?? 0}</strong></span>
             </div>
           )}
@@ -836,7 +847,8 @@ export function Board({
           {/* In Prison Status Notice */}
           {!isSpectator && myPlayerState?.inPrison && isMyTurn && !isGameFinished && (
             <div className="courtyard-prison-banner" role="alert">
-              <span>⛓️ In Prison (Turn attempt {myPlayerState.prisonTurns}/3)</span>
+              <LockIcon size={13} style={{ marginRight: 6, verticalAlign: 'middle' }} />
+              <span>In Prison (Turn attempt {myPlayerState.prisonTurns}/3)</span>
             </div>
           )}
 
@@ -844,7 +856,6 @@ export function Board({
           {gameState?.auction && (
             <div className="courtyard-auction-card" role="region" aria-label="Active Auction">
               <div className="auction-card-header">
-                <span className="auction-gavel-icon" aria-hidden="true">🔨</span>
                 <span className="auction-prop-name">
                   Auction: {getBoardSpace(gameState.auction.spaceId).name}
                 </span>
@@ -864,7 +875,8 @@ export function Board({
 
               {isSpectator ? (
                 <div className="auction-spectator-note">
-                  👁️ Spectating Auction (Read-Only)
+                  <EyeIcon size={14} style={{ marginRight: 6, verticalAlign: 'middle' }} />
+                  <span>Spectating Auction (Read-Only)</span>
                 </div>
               ) : gameState.auction.activeBidders.includes(currentSessionId) ? (
                 <div className="auction-buttons-row">
@@ -918,7 +930,7 @@ export function Board({
           <div className="courtyard-action-controls">
             {isSpectator ? (
               <div className="courtyard-player-playing-status" role="status">
-                <span className="spectator-eye" aria-hidden="true">👁️</span>
+                <EyeIcon size={15} className="spectator-eye" />
                 <span className="playing-status-text">
                   {!isGameStarted
                     ? 'Waiting for host to start...'
@@ -937,7 +949,7 @@ export function Board({
                     onClick={onStartGame}
                     disabled={roomSnapshot.players.length < 2 || isSubmittingAction}
                   >
-                    <span>▶ Start Game</span>
+                    <span>Start Game</span>
                   </button>
                   {roomSnapshot.players.length < 2 && (
                     <span className="action-helper-warning">
@@ -956,7 +968,8 @@ export function Board({
                 className="btn-primary-action btn-view-results-action"
                 onClick={onShowResults}
               >
-                <span>🏆 View Results</span>
+                <TrophyIcon size={15} style={{ marginRight: 6 }} />
+                <span>View Results</span>
               </button>
             ) : isMyTurn ? (
               isTokenMoving || isDiceAnimating ? (
@@ -975,7 +988,8 @@ export function Board({
                       onClick={onPayPrisonFine}
                       disabled={(myPlayerState?.cash ?? 0) < 50 || isSubmittingAction}
                     >
-                      <span>🔓 Pay $50 & Exit</span>
+                      <UnlockIcon size={14} style={{ marginRight: 6 }} />
+                      <span>Pay $50 & Exit</span>
                     </button>
                   )}
                   <button
@@ -985,7 +999,6 @@ export function Board({
                     onClick={onRollDice}
                     disabled={isRolling || isSubmittingAction}
                   >
-                    <span className="courtyard-btn-icon" aria-hidden="true">🎲</span>
                     <span>
                       {isRolling
                         ? 'Rolling...'
@@ -1015,7 +1028,7 @@ export function Board({
                     onClick={onBuyProperty}
                     disabled={!canAffordCurrentSpace || isSubmittingAction}
                   >
-                    <span className="courtyard-btn-icon" aria-hidden="true">🛒</span>
+                    <CartIcon size={13} className="courtyard-btn-icon" />
                     <span>Buy for ${currentLandingSpace.price}</span>
                   </button>
                   <button
@@ -1099,14 +1112,16 @@ export function Board({
                   className="btn-primary-action btn-accept-trade"
                   onClick={onAcceptTrade}
                 >
-                  Accept ✅
+                  <CheckIcon size={14} style={{ marginRight: 4 }} />
+                  <span>Accept</span>
                 </button>
                 <button
                   type="button"
                   className="btn-secondary-action btn-reject-trade"
                   onClick={onRejectTrade}
                 >
-                  Decline ✕
+                  <CloseIcon size={13} style={{ marginRight: 4 }} />
+                  <span>Decline</span>
                 </button>
               </div>
             </div>
@@ -1125,7 +1140,8 @@ export function Board({
             disabled={otherPlayers.length === 0 || isTokenMoving || isSubmittingAction}
             aria-label="Propose Trade"
           >
-            <span>🤝 Trade</span>
+            <TradeIcon size={16} style={{ marginRight: 6 }} />
+            <span>Trade</span>
           </button>
 
           {myPlayerState && !myPlayerState.isBankrupt && (
@@ -1145,7 +1161,8 @@ export function Board({
               }}
               aria-label="Declare Bankruptcy"
             >
-              <span>🏳️ Bankrupt</span>
+              <BankruptIcon size={16} style={{ marginRight: 6 }} />
+              <span>Bankrupt</span>
             </button>
           )}
         </div>
@@ -1222,7 +1239,7 @@ export function Board({
                   )}
 
                   {/* AI Bot badge */}
-                  {p.isBot && <span className="player-info-bot-tag player-row-bot-chip" title="AI Bot">🤖</span>}
+                  {p.isBot && <span className="player-info-bot-tag player-row-bot-chip" title="AI Bot">BOT</span>}
 
                   {/* Current User [->] indicator badge */}
                   {isMe && (
@@ -1234,7 +1251,9 @@ export function Board({
                   {/* Bankrupt or Prison badges */}
                   {isBankrupt && <span className="player-info-bankrupt-badge">OUT</span>}
                   {!isBankrupt && inPrison && !isTurn && (
-                    <span className="player-info-prison-badge" title="In Prison">⛓️</span>
+                    <span className="player-info-prison-badge" title="In Prison">
+                      <LockIcon size={12} />
+                    </span>
                   )}
 
                   {/* Turn badge for unit tests & screen readers */}
@@ -1300,7 +1319,10 @@ export function Board({
                     : selectedSpace.name}
                 </h2>
                 {isSpectator && (
-                  <span className="prop-spectator-chip">👁️ Spectating</span>
+                  <span className="prop-spectator-chip">
+                    <EyeIcon size={13} style={{ marginRight: 4, verticalAlign: 'middle' }} />
+                    Spectating
+                  </span>
                 )}
               </div>
               <button

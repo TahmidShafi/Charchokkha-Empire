@@ -1,6 +1,17 @@
 import { PLAYER_COLORS, type GameState, type Player, type RoomSettings } from '@charchokkha/shared';
 import { PlayerCharacter } from './PlayerCharacter';
 import { soundManager } from '../audio/soundManager';
+import {
+  SettingsIcon,
+  CrownIcon,
+  EyeIcon,
+  VolumeIcon,
+  VolumeMutedIcon,
+  BellIcon,
+  LockIcon,
+  ZapIcon,
+  PlusIcon,
+} from './Icons';
 
 export interface GameSettingsProps {
   playerName: string;
@@ -76,7 +87,7 @@ export function GameSettings({
       {/* Top Header if in modal or drawer */}
       <div className="settings-header-bar">
         <div className="settings-header-title">
-          <span className="settings-header-icon" aria-hidden="true">⚙️</span>
+          <SettingsIcon size={16} className="settings-header-icon" />
           <span>Table Settings</span>
         </div>
         {onClose && (
@@ -97,7 +108,7 @@ export function GameSettings({
           <div className="player-profile-row">
             <div className="player-avatar-badge" title={isSpectator ? 'Spectating Table' : 'Your avatar'}>
               {isSpectator ? (
-                <span>👁️</span>
+                <EyeIcon size={20} />
               ) : (
                 <PlayerCharacter color={playerColor || '#C4E64A'} size={28} showGlow />
               )}
@@ -106,9 +117,15 @@ export function GameSettings({
               <div className="player-name-line">
                 <span className="name-bold">{playerName}</span>
                 {isSpectator ? (
-                  <span className="spectator-pill-badge">👁️ Spectator</span>
+                  <span className="spectator-pill-badge">
+                    <EyeIcon size={12} style={{ marginRight: 4 }} />
+                    Spectator
+                  </span>
                 ) : isHost ? (
-                  <span className="host-pill-badge">👑 Host</span>
+                  <span className="host-pill-badge">
+                    <CrownIcon size={12} style={{ marginRight: 4 }} />
+                    Host
+                  </span>
                 ) : (
                   <span className="player-pill-badge">Player</span>
                 )}
@@ -164,7 +181,7 @@ export function GameSettings({
               className="btn-secondary-action btn-change-token"
               onClick={onAvatarChange}
             >
-              <span>🎨</span> Cycle Avatar
+              <span>Cycle Avatar</span>
             </button>
           )}
         </div>
@@ -172,7 +189,10 @@ export function GameSettings({
         {/* Audio & Sound Effects */}
         <div className="settings-section-card">
           <div className="section-card-header">
-            <span className="section-title-label">🔊 Audio & Sound Effects</span>
+            <span className="section-title-label">
+              <VolumeIcon size={15} style={{ marginRight: 6, verticalAlign: 'middle' }} />
+              Audio & Sound Effects
+            </span>
             <span className="sync-status-badge">{isMuted ? 'Muted' : 'Active'}</span>
           </div>
           <div className="audio-controls-row">
@@ -183,7 +203,17 @@ export function GameSettings({
               onClick={onToggleMute}
               aria-label={isMuted ? 'Unmute all game sound effects' : 'Mute all game sound effects'}
             >
-              <span>{isMuted ? '🔇 Unmute Sound' : '🔊 Mute Sound'}</span>
+              {isMuted ? (
+                <>
+                  <VolumeMutedIcon size={14} style={{ marginRight: 6 }} />
+                  <span>Unmute Sound</span>
+                </>
+              ) : (
+                <>
+                  <VolumeIcon size={14} style={{ marginRight: 6 }} />
+                  <span>Mute Sound</span>
+                </>
+              )}
             </button>
             <button
               type="button"
@@ -196,7 +226,8 @@ export function GameSettings({
               title="Test audio output level"
               aria-label="Test audio output"
             >
-              <span>🔔 Test Audio</span>
+              <BellIcon size={14} style={{ marginRight: 6 }} />
+              <span>Test Audio</span>
             </button>
           </div>
           <span className="setting-description-note">
@@ -229,7 +260,7 @@ export function GameSettings({
                       {p.nickname} {p.nickname === playerName && '(You)'}
                     </span>
                     {p.isBot && (
-                      <span className="bot-pill-badge" title="Automated Test Bot">🤖 Bot</span>
+                      <span className="bot-pill-badge" title="Automated Test Bot">BOT</span>
                     )}
                     {!p.connected && !p.isBot && (
                       <span className="reconnecting-tag">(reconnecting...)</span>
@@ -241,10 +272,10 @@ export function GameSettings({
                       <span className="roster-cash-amount">${pState.cash}</span>
                     )}
                     {isTurn && (
-                      <span className="turn-mini-badge">🎲 Turn</span>
+                      <span className="turn-mini-badge">Turn</span>
                     )}
                     {p.isHost && (
-                      <span className="host-mini-crown" title="Room Host">👑</span>
+                      <CrownIcon size={12} className="host-mini-crown" title="Room Host" />
                     )}
                     {isHost && p.isBot && onRemoveBot && !isGameEnded && (
                       <button
@@ -268,7 +299,7 @@ export function GameSettings({
         {isHost && (
           <div className="settings-section-card test-bots-section-card">
             <div className="section-card-header">
-              <span className="section-title-label">🤖 Test Bots (QA)</span>
+              <span className="section-title-label">Test Bots (QA)</span>
               <span className={`test-room-badge ${isPrivate ? 'badge-private' : 'badge-public'}`}>
                 {isPrivate ? 'Private Table' : 'Public Table'}
               </span>
@@ -304,7 +335,8 @@ export function GameSettings({
                       onClick={() => onAddBot?.(1)}
                       aria-label="Add 1 Bot"
                     >
-                      <span>🤖 +1 Bot</span>
+                      <PlusIcon size={13} style={{ marginRight: 4 }} />
+                      <span>1 Bot</span>
                     </button>
                     <button
                       type="button"
@@ -314,14 +346,15 @@ export function GameSettings({
                       onClick={() => onAddBot?.(maxPlayers - players.length)}
                       aria-label="Fill Available Seats with Bots"
                     >
-                      <span>⚡ Fill Seats ({Math.max(0, maxPlayers - players.length)})</span>
+                      <ZapIcon size={13} style={{ marginRight: 4 }} />
+                      <span>Fill Seats ({Math.max(0, maxPlayers - players.length)})</span>
                     </button>
                   </div>
                 )}
 
                 {!isWaiting && !isGameEnded && (
                   <div className="bot-game-active-note">
-                    <span>🤖 Match running. Bots take authoritative turns automatically.</span>
+                    <span>Match running. Bots take authoritative turns automatically.</span>
                   </div>
                 )}
 
@@ -385,7 +418,8 @@ export function GameSettings({
             ) : (
               <div className="bot-private-required-card">
                 <div className="bot-private-text">
-                  <span>🔒 Test bots are exclusive to Private Tables to keep public matchmaking human-only.</span>
+                  <LockIcon size={13} style={{ marginRight: 6, verticalAlign: 'middle' }} />
+                  <span>Test bots are exclusive to Private Tables to keep public matchmaking human-only.</span>
                 </div>
                 <button
                   type="button"
@@ -405,7 +439,12 @@ export function GameSettings({
         <div className="settings-section-card">
           <div className="section-card-header">
             <span className="section-title-label">Room Configuration</span>
-            {!isHost && <span className="host-only-note">🔒 Host Only</span>}
+            {!isHost && (
+              <span className="host-only-note">
+                <LockIcon size={12} style={{ marginRight: 4 }} />
+                Host Only
+              </span>
+            )}
           </div>
 
           {/* Maximum players */}
@@ -492,7 +531,12 @@ export function GameSettings({
         <div className="settings-section-card">
           <div className="section-card-header">
             <span className="section-title-label">Gameplay Rules</span>
-            {!isHost && <span className="host-only-note">🔒 Host Only</span>}
+            {!isHost && (
+              <span className="host-only-note">
+                <LockIcon size={12} style={{ marginRight: 4 }} />
+                Host Only
+              </span>
+            )}
           </div>
 
           {/* x2 rent on full-set */}

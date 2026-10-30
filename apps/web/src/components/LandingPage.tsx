@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { PLAYER_COLORS } from '@charchokkha/shared';
 import { PlayerCharacter } from './PlayerCharacter';
+import { AlertTriangleIcon, LockIcon, EyeIcon } from './Icons';
 
 export interface LandingPageProps {
   nickname: string;
@@ -147,7 +148,7 @@ export function LandingPage({
         {/* Server Connection Error Alert */}
         {serverError && (
           <div className="landing-alert-banner" role="alert">
-            <span className="alert-icon">⚠️</span>
+            <AlertTriangleIcon size={16} className="alert-icon" />
             <span className="alert-text">{serverError}</span>
           </div>
         )}
@@ -299,7 +300,6 @@ export function LandingPage({
               onClick={() => setShowJoinModal(true)}
               disabled={isConnecting || submitting}
             >
-              <span className="btn-icon">🚪</span>
               <span>Join Room</span>
             </button>
 
@@ -310,7 +310,7 @@ export function LandingPage({
               onClick={handlePrivateSubmit}
               disabled={isConnecting || submitting}
             >
-              <span className="btn-icon">🔒</span>
+              <LockIcon size={14} style={{ marginRight: 6 }} />
               <span>Private Room</span>
             </button>
           </div>
@@ -359,7 +359,7 @@ export function LandingPage({
             {serverError && (serverError.toLowerCase().includes('capacity') || serverError.toLowerCase().includes('full')) && (
               <div className="room-full-spectate-prompt" role="alert">
                 <div className="prompt-header">
-                  <span className="prompt-icon" aria-hidden="true">👁️</span>
+                  <EyeIcon size={16} className="prompt-icon" />
                   <strong>Table Full — Spectate Match</strong>
                 </div>
                 <p className="prompt-desc">
@@ -375,7 +375,8 @@ export function LandingPage({
                       if (cleanCode) onSpectateByCode(cleanCode);
                     }}
                   >
-                    Watch Table Live 👁️
+                    <span>Watch Table Live</span>
+                    <EyeIcon size={14} style={{ marginLeft: 6 }} />
                   </button>
                 )}
               </div>
@@ -429,7 +430,8 @@ export function LandingPage({
                       }
                     }}
                   >
-                    <span>👁️ Spectate Table Instead</span>
+                    <EyeIcon size={14} style={{ marginRight: 6 }} />
+                    <span>Spectate Table Instead</span>
                   </button>
                 </div>
               )}

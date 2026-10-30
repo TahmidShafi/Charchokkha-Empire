@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { ChatIcon, CloseIcon, SendIcon } from './Icons';
 
 export interface ChatMessage {
   id: string;
@@ -46,7 +47,7 @@ export function ChatPanel({
       {/* Header */}
       <div className="chat-header-bar">
         <div className="chat-header-left">
-          <span className="chat-header-icon" aria-hidden="true">💬</span>
+          <ChatIcon size={16} className="chat-header-icon" />
           <span className="chat-header-title">Table Chat</span>
           <span className="chat-message-count-badge">{messages.length}</span>
         </div>
@@ -57,7 +58,7 @@ export function ChatPanel({
             onClick={onCloseMobile}
             aria-label="Close chat"
           >
-            ✕
+            <CloseIcon size={14} />
           </button>
         )}
       </div>
@@ -66,7 +67,7 @@ export function ChatPanel({
       <div className="chat-messages-container" tabIndex={0} aria-live="polite">
         {messages.length === 0 ? (
           <div className="chat-empty-hint">
-            <span className="chat-empty-icon" aria-hidden="true">💭</span>
+            <ChatIcon size={26} className="chat-empty-icon" style={{ opacity: 0.35, marginBottom: 4 }} />
             <span>No messages yet. Say hello to the table!</span>
           </div>
         ) : (
@@ -110,7 +111,7 @@ export function ChatPanel({
           title="Send message"
           aria-label="Send message"
         >
-          ➤
+          <SendIcon size={14} />
         </button>
       </form>
     </div>

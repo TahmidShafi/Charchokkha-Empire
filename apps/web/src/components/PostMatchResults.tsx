@@ -6,6 +6,7 @@ import {
 } from '@charchokkha/game-engine';
 import { PROPERTY_GROUP_COLORS, getSpaceBadge } from '../boardData';
 import { PlayerCharacter } from './PlayerCharacter';
+import { TrophyIcon, CrownIcon, RefreshIcon, EyeIcon, LogOutIcon } from './Icons';
 
 export interface PostMatchResultsProps {
   roomSnapshot: RoomSnapshot;
@@ -79,8 +80,8 @@ export const PostMatchResults: React.FC<PostMatchResultsProps> = ({
         <header className="post-match-header">
           <div className="winner-podium-spotlight">
             <div className="winner-crown-wrapper" aria-hidden="true">
-              <span className="winner-trophy-emoji">🏆</span>
-              <span className="winner-crown-emoji">👑</span>
+              <TrophyIcon size={24} className="winner-trophy-icon" style={{ color: '#fbbf24' }} />
+              <CrownIcon size={22} className="winner-crown-icon" />
             </div>
 
             <div className="winner-identity-block">
@@ -128,7 +129,7 @@ export const PostMatchResults: React.FC<PostMatchResultsProps> = ({
             className={`results-tab-btn ${activeTab === 'standings' ? 'active' : ''}`}
             onClick={() => setActiveTab('standings')}
           >
-            🏅 Final Standings
+            Final Standings
           </button>
           <button
             type="button"
@@ -137,7 +138,7 @@ export const PostMatchResults: React.FC<PostMatchResultsProps> = ({
             className={`results-tab-btn ${activeTab === 'stats' ? 'active' : ''}`}
             onClick={() => setActiveTab('stats')}
           >
-            📊 Match Statistics
+            Match Statistics
           </button>
           <button
             type="button"
@@ -146,7 +147,7 @@ export const PostMatchResults: React.FC<PostMatchResultsProps> = ({
             className={`results-tab-btn ${activeTab === 'properties' ? 'active' : ''}`}
             onClick={() => setActiveTab('properties')}
           >
-            🏙️ Property Portfolios
+            Property Portfolios
           </button>
         </nav>
 
@@ -157,14 +158,7 @@ export const PostMatchResults: React.FC<PostMatchResultsProps> = ({
               {standings.map((standing) => {
                 const isMe = standing.playerId === currentSessionId;
                 const isHostPlayer = roomSnapshot.hostId === standing.playerId;
-                const rankMedal =
-                  standing.rank === 1
-                    ? '🥇'
-                    : standing.rank === 2
-                    ? '🥈'
-                    : standing.rank === 3
-                    ? '🥉'
-                    : `#${standing.rank}`;
+                const rankMedal = `#${standing.rank}`;
 
                 return (
                   <div
@@ -192,9 +186,9 @@ export const PostMatchResults: React.FC<PostMatchResultsProps> = ({
                         </div>
                         <span className="standing-status-label">
                           {standing.isBankrupt
-                            ? `💀 Bankrupt (Eliminated #${standing.stats?.bankruptcyOrder ?? '—'})`
+                            ? `Bankrupt (Eliminated #${standing.stats?.bankruptcyOrder ?? '—'})`
                             : standing.rank === 1
-                            ? '👑 Victorious Empire'
+                            ? 'Victorious Empire'
                             : 'Active Empire'}
                         </span>
                       </div>
@@ -382,7 +376,8 @@ export const PostMatchResults: React.FC<PostMatchResultsProps> = ({
                 onClick={onRematch}
                 id="btn-post-match-rematch"
               >
-                <span>Play Again / Rematch 🔄</span>
+                <RefreshIcon size={14} style={{ marginRight: 6 }} />
+                <span>Play Again / Rematch</span>
               </button>
             )}
 
@@ -405,7 +400,8 @@ export const PostMatchResults: React.FC<PostMatchResultsProps> = ({
               onClick={onToggleBoardView}
               id="btn-inspect-board"
             >
-              <span>Inspect Tabletop 🗺️</span>
+              <EyeIcon size={14} style={{ marginRight: 6 }} />
+              <span>Inspect Tabletop</span>
             </button>
 
             {/* Leave Room Button */}
@@ -415,7 +411,8 @@ export const PostMatchResults: React.FC<PostMatchResultsProps> = ({
               onClick={onLeaveRoom}
               id="btn-leave-match"
             >
-              <span>Leave Table 🚪</span>
+              <LogOutIcon size={14} style={{ marginRight: 6 }} />
+              <span>Leave Table</span>
             </button>
           </div>
         </footer>

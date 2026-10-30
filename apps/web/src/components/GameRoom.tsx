@@ -5,6 +5,7 @@ import { ChatPanel, type ChatMessage } from './ChatPanel';
 import { GameSettings } from './GameSettings';
 import { PostMatchResults } from './PostMatchResults';
 import { soundManager } from '../audio/soundManager';
+import { DiceIcon, ChatIcon, SettingsIcon, CrownIcon, EyeIcon, TrophyIcon } from './Icons';
 import {
   SOCKET_EVENTS,
   type Player,
@@ -616,7 +617,7 @@ export function GameRoom({
           {/* Spectator Mode Indicator */}
           {isSpectator && (
             <div className="header-spectator-pill" title="You are spectating this table (Read-Only)">
-              <span className="spectator-eye-icon" aria-hidden="true">👁️</span>
+              <EyeIcon size={14} className="spectator-eye-icon" />
               <span className="spectator-badge-text">SPECTATING</span>
             </div>
           )}
@@ -627,7 +628,7 @@ export function GameRoom({
               className="header-spectator-count-pill"
               title={`${roomSnapshot.spectatorCount} spectator(s) watching this table`}
             >
-              <span className="spectator-eye-icon" aria-hidden="true">👁️</span>
+              <EyeIcon size={14} className="spectator-eye-icon" />
               <span className="spectator-count-num">{roomSnapshot.spectatorCount}</span>
             </div>
           )}
@@ -737,7 +738,7 @@ export function GameRoom({
               <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
             </svg>
             <span className="btn-label-desktop">Settings</span>
-            {isHost && <span className="host-crown-mini">👑</span>}
+            {isHost && <CrownIcon size={12} className="host-crown-mini" />}
           </button>
 
           {/* Leave Room Action */}
@@ -786,14 +787,14 @@ export function GameRoom({
                 <div className="player-roster-avatar-wrap">
                   <PlayerCharacter color={p.color || '#C4E64A'} size={24} showGlow={false} />
                   {p.isHost && (
-                    <span className="player-host-crown" title="Room Host">👑</span>
+                    <CrownIcon size={12} className="player-host-crown" title="Room Host" />
                   )}
                 </div>
 
                 <div className="player-roster-info-stack">
                   <div className="player-name-row">
                     <span className="roster-name-truncate">{p.nickname}</span>
-                    {p.isBot && <span className="bot-self-chip">🤖 BOT</span>}
+                    {p.isBot && <span className="bot-self-chip">BOT</span>}
                     {isMe && <span className="you-self-chip">You</span>}
                   </div>
                   <div className="player-balance-row">
@@ -822,7 +823,7 @@ export function GameRoom({
       {/* ==================== 3. MAIN STAGE / CONTENT LAYOUT ==================== */}
       {isSpectator && (
         <div className="spectator-top-alert-strip" role="status">
-          <span className="spectator-eye-icon" aria-hidden="true">👁️</span>
+          <EyeIcon size={15} className="spectator-eye-icon" />
           <span>You are spectating this match in real-time. Player actions and table controls are read-only.</span>
         </div>
       )}
@@ -947,7 +948,7 @@ export function GameRoom({
           onClick={() => setActiveMobileTab('board')}
           aria-label="Board View"
         >
-          <span className="tab-icon">🎲</span>
+          <DiceIcon size={18} className="tab-icon" />
           <span className="tab-label">Board</span>
         </button>
 
@@ -957,7 +958,7 @@ export function GameRoom({
           onClick={() => setActiveMobileTab('chat')}
           aria-label="Chat View"
         >
-          <span className="tab-icon">💬</span>
+          <ChatIcon size={18} className="tab-icon" />
           <span className="tab-label">Chat</span>
           {chatMessages.length > 0 && (
             <span className="tab-counter-badge">{chatMessages.length}</span>
@@ -970,9 +971,9 @@ export function GameRoom({
           onClick={() => setActiveMobileTab('settings')}
           aria-label="Settings View"
         >
-          <span className="tab-icon">⚙️</span>
+          <SettingsIcon size={18} className="tab-icon" />
           <span className="tab-label">Settings</span>
-          {isHost && <span className="tab-host-crown">👑</span>}
+          {isHost && <CrownIcon size={12} className="tab-host-crown" />}
         </button>
       </nav>
 
@@ -998,7 +999,8 @@ export function GameRoom({
             className="btn-floating-view-results"
             onClick={() => setDismissedResultsForSequence(null)}
           >
-            View Match Results 🏆
+            <span>View Match Results</span>
+            <TrophyIcon size={14} style={{ marginLeft: 6 }} />
           </button>
         </div>
       )}
