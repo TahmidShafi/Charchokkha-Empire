@@ -54,6 +54,43 @@ describe('Courtyard Event Notification Formatter', () => {
     expect(formatEventMessage(salaryMsg)).toBe('START · +$200');
   });
 
+  it('maps player guest IDs and bot IDs to clean player nicknames in ended turn events', () => {
+    const mockPlayers = [
+      { id: 'guest_b4e96b23772adefb', nickname: 'Alice', color: '#ff0000', isBot: false, isHost: true, connected: true },
+      { id: 'guest_b38a69f61db74be2', nickname: 'Bob', color: '#00ff00', isBot: false, isHost: false, connected: true },
+      { id: 'bot_5e34e85b', nickname: 'RoboBot', color: '#0000ff', isBot: true, isHost: false, connected: true },
+    ] as any;
+
+    const rawMsg1 = 'Player guest_b4e96b23772adefb ended turn. Active player is now guest_b38a69f61db74be2';
+    expect(formatEventMessage(rawMsg1, mockPlayers)).toBe('Alice · Ended turn');
+
+    const rawMsg2 = 'Player bot_5e34e85b ended turn. Active player is now guest_b4e96b23772adefb';
+    expect(formatEventMessage(rawMsg2, mockPlayers)).toBe('RoboBot · Ended turn');
+  });
+
+  it('sanitizes unmapped guest and bot hex hashes gracefully', () => {
+    const rawGuest = 'Player guest_deadbeef1234 ended turn. Active player is now guest_cafebabe5678';
+    expect(formatEventMessage(rawGuest)).toBe('Player · Ended turn');
+
+    const rawBot = 'Player bot_99887766 ended turn.';
+    expect(formatEventMessage(rawBot)).toBe('Bot · Ended turn');
+  });
+
+  it('formats dice roll telemetry with player actor prefix', () => {
+    const actor = { id: 'guest_123', nickname: 'Alice', color: '#ff0000', isBot: false, isHost: true, connected: true } as any;
+    const rawRoll = 'Rolled 6 (3 + 3) and landed on Mithagoli.';
+    expect(formatEventMessage(rawRoll, [actor], actor)).toBe('Alice · Rolled 6 (3 + 3) · landed on Mithagoli');
+
+    // Without actor nickname, fallback to clean roll string
+    expect(formatEventMessage(rawRoll)).toBe('Rolled 6 (3 + 3) · landed on Mithagoli');
+  });
+
+  it('formats auction bids, passes and bankruptcies cleanly', () => {
+    expect(formatEventMessage('Alice bid $300')).toBe('Alice · Bid $300');
+    expect(formatEventMessage('Bob passed in auction')).toBe('Bob · Passed auction');
+    expect(formatEventMessage('Charlie declared bankruptcy')).toBe('Charlie · Declared bankruptcy');
+  });
+
   it('handles empty or unrecognized fallback safely', () => {
     expect(formatEventMessage('')).toBe('');
     expect(formatEventMessage('Game started. Player 1 turn to roll.')).toBe('Game started. Player 1 turn to roll.');

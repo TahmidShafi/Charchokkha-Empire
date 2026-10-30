@@ -98,6 +98,7 @@ export default function App() {
           lastDiceRoll: { die1: 4, die2: 3, total: 7, isDouble: false },
           startingSalary: 200,
           vacationPot: 150,
+          lastActionMessage: urlParams.get('actionMsg') || undefined,
           players: {
             p1: { id: 'p1', position: 7, cash: 1350, inPrison: false, prisonTurns: 0, isBankrupt: false },
             p2: { id: 'p2', position: 15, cash: 1280, inPrison: false, prisonTurns: 0, isBankrupt: false },

@@ -24,21 +24,52 @@ import {
 
 /**
  * Concise event message formatter for the central courtyard notification banner and ticker.
- * Transforms verbose engine action logs into compact, professional game telemetry strings.
+ * Transforms verbose engine action logs into compact, professional game telemetry strings
+ * that strictly display player nicknames and executed actions (never internal session IDs).
  */
-export function formatEventMessage(msg: string): string {
+export function formatEventMessage(
+  msg: string,
+  players?: Player[],
+  actor?: Player | null
+): string {
   if (!msg) return '';
 
+  let text = msg;
+
+  // 1. Resolve player IDs (guest_xxx, bot_xxx, p1, etc.) to player nicknames
+  if (players && players.length > 0) {
+    for (const p of players) {
+      if (p.id) {
+        const name = p.nickname || 'Player';
+        text = text.replaceAll(`Player ${p.id}`, name);
+        text = text.replaceAll(p.id, name);
+      }
+    }
+  }
+
+  // 2. Sanitize any remaining unmapped guest_ or bot_ hex hashes
+  text = text.replace(/Player\s+guest_[a-f0-9]{4,}/gi, 'Player');
+  text = text.replace(/guest_[a-f0-9]{4,}/gi, 'Player');
+  text = text.replace(/Player\s+bot_[a-f0-9]{4,}/gi, 'Bot');
+  text = text.replace(/bot_[a-f0-9]{4,}/gi, 'Bot');
+
+  // Ended turn: "Alice ended turn. Active player is now Bob." or "Player ended turn..."
+  const endedTurnMatch = text.match(/^(.+?)\s+ended turn/i);
+  if (endedTurnMatch) {
+    const actorName = endedTurnMatch[1].replace(/^Player\s+/i, '').trim();
+    return actorName ? `${actorName} · Ended turn` : 'Ended turn';
+  }
+
   // Purchase: "Purchased Chattogram for $200"
-  const buyMatch = msg.match(/Purchased\s+(.+?)\s+for\s+\$(\d+)/i);
+  const buyMatch = text.match(/(?:(.+?)\s+)?Purchased\s+(.+?)\s+for\s+\$(\d+)/i);
   if (buyMatch) {
-    return `${buyMatch[1]} · Bought for $${buyMatch[2]}`;
+    return `${buyMatch[2]} · Bought for $${buyMatch[3]}`;
   }
 
   // Rent: "Player landed on Saint Martin. Owned by p2. Paid $50 rent." or "Paid $50 to Bob for rent on Saint Martin"
   const rentMatch =
-    msg.match(/landed on\s+(.+?)\..*?Paid\s+\$(\d+)\s+rent/i) ||
-    msg.match(/Paid\s+\$(\d+)\s+(?:to\s+.+?\s+)?for rent on\s+(.+)/i);
+    text.match(/landed on\s+(.+?)\..*?Paid\s+\$(\d+)\s+rent/i) ||
+    text.match(/Paid\s+\$(\d+)\s+(?:to\s+.+?\s+)?for rent on\s+(.+)/i);
   if (rentMatch) {
     const isFirstNum = !isNaN(Number(rentMatch[1]));
     const prop = isFirstNum ? rentMatch[2] : rentMatch[1];
@@ -48,8 +79,8 @@ export function formatEventMessage(msg: string): string {
 
   // Tax: "Player landed on Earnings Tax. Paid $100 in tax." or "Paid $100 for Earnings Tax"
   const taxMatch =
-    msg.match(/landed on\s+(.+?)\..*?Paid\s+\$(\d+)\s+in tax/i) ||
-    msg.match(/Paid\s+\$(\d+)\s+(?:for|in)\s+(.+?)(?:\.|$)/i);
+    text.match(/landed on\s+(.+?)\..*?Paid\s+\$(\d+)\s+in tax/i) ||
+    text.match(/Paid\s+\$(\d+)\s+(?:for|in)\s+(.+?)(?:\.|$)/i);
   if (taxMatch) {
     const isFirstNum = !isNaN(Number(taxMatch[1]));
     const taxName = isFirstNum ? taxMatch[2] : taxMatch[1];
@@ -58,47 +89,69 @@ export function formatEventMessage(msg: string): string {
   }
 
   // Vacation pot: "Collected $150 from Vacation cash pot!"
-  const vacMatch = msg.match(/Collected\s+\$(\d+)\s+from Vacation/i);
+  const vacMatch = text.match(/Collected\s+\$(\d+)\s+from Vacation/i);
   if (vacMatch) {
     return `Vacation Pot · +$${vacMatch[1]}`;
   }
 
   // Rehab / Prison
-  if (msg.includes('Rolled double') && msg.includes('Freed from prison')) {
+  if (text.includes('Rolled double') && text.includes('Freed from prison')) {
     return 'Freed from Prison (Doubles!)';
   }
-  if (msg.includes('fine to leave prison') || msg.includes('freed from prison')) {
+  if (text.includes('fine to leave prison') || text.includes('freed from prison')) {
     return 'Paid $50 Fine · Freed';
   }
-  if (msg.includes('Arrested') || msg.includes('In Prison') || msg.includes('Rehab')) {
+  if (text.includes('Arrested') || text.includes('In Prison') || text.includes('Rehab')) {
     return 'Rehab Center · Arrested';
   }
 
-  // Auction ended
-  const auctionMatch = msg.match(/Auction for\s+(.+?)\s+ended!\s+(.+?)\s+won with\s+\$(\d+)/i);
+  // Roll and land: "Rolled 6 (3 + 3) and landed on Mithagoli."
+  const rollMatch = text.match(/Rolled\s+(\d+\s*\([^)]+\))\s*(?:and\s+)?landed on\s+(.+?)(?:\.|$)/i);
+  if (rollMatch) {
+    const actorPrefix = actor?.nickname ? `${actor.nickname} · ` : '';
+    return `${actorPrefix}Rolled ${rollMatch[1]} · landed on ${rollMatch[2].trim()}`;
+  }
+
+  // Auction
+  const auctionMatch = text.match(/Auction for\s+(.+?)\s+ended!\s+(.+?)\s+won with\s+\$(\d+)/i);
   if (auctionMatch) {
     return `Auction: ${auctionMatch[1]} · ${auctionMatch[2]} ($${auctionMatch[3]})`;
   }
+  const bidMatch = text.match(/^(.+?)\s+bid\s+\$(\d+)/i);
+  if (bidMatch) {
+    return `${bidMatch[1].trim()} · Bid $${bidMatch[2]}`;
+  }
+  const passMatch = text.match(/^(.+?)\s+passed in auction/i);
+  if (passMatch) {
+    return `${passMatch[1].trim()} · Passed auction`;
+  }
 
   // Trade completed
-  if (msg.includes('Trade completed')) {
+  if (text.includes('Trade completed')) {
     return 'Trade Completed ✓';
   }
 
+  // Bankruptcy
+  const bankruptMatch = text.match(/^(.+?)\s+declared bankruptcy/i);
+  if (bankruptMatch) {
+    return `${bankruptMatch[1].trim()} · Declared bankruptcy`;
+  }
+
   // Salary
-  const goMatch = msg.match(/Collected\s+\$(\d+)\s+salary/i);
+  const goMatch = text.match(/Collected\s+\$(\d+)\s+salary/i);
   if (goMatch) {
     return `START · +$${goMatch[1]}`;
   }
 
   // Declined property
-  const declineMatch = msg.match(/chose not to buy\s+(.+?)(?:\.|$)/i);
+  const declineMatch = text.match(/chose not to buy\s+(.+?)(?:\.|$)/i);
   if (declineMatch) {
     return `${declineMatch[1]} · Declined`;
   }
 
-  // Default cleanup: strip "Player landed on "
-  const cleaned = msg.replace(/^Player landed on\s+/i, '').trim();
+  // Default cleanup: strip "Player landed on " and "Active player is now..."
+  let cleaned = text.replace(/^Player landed on\s+/i, '').trim();
+  cleaned = cleaned.replace(/\s*Active player is now\s+.*$/i, '').trim();
   return cleaned.length > 44 ? `${cleaned.slice(0, 42)}…` : cleaned;
 }
 
@@ -249,10 +302,19 @@ export function Board({
 
   useEffect(() => {
     if (!gameState?.lastActionMessage) return;
-    const msg = formatEventMessage(gameState.lastActionMessage);
+    let actionActor: Player | undefined;
+    const endedMatch = gameState.lastActionMessage.match(/Player\s+([^\s]+)\s+ended turn/i);
+    if (endedMatch) {
+      actionActor = roomSnapshot.players.find((p) => p.id === endedMatch[1]);
+    }
+    if (!actionActor) {
+      actionActor = activePlayer || roomSnapshot.players.find((p) => p.id === activePlayerId);
+    }
+    const msg = formatEventMessage(gameState.lastActionMessage, roomSnapshot.players, actionActor);
+    if (!msg) return;
     setActivityFeed((prev) => {
       if (prev.length > 0 && prev[prev.length - 1].text === msg) return prev;
-      const matchingPlayer = roomSnapshot.players.find(
+      const matchingPlayer = actionActor || roomSnapshot.players.find(
         (p) => msg.includes(p.nickname) || p.id === activePlayerId
       );
       return [
@@ -264,7 +326,7 @@ export function Board({
         },
       ];
     });
-  }, [gameState?.lastActionMessage, roomSnapshot.players, activePlayerId]);
+  }, [gameState?.lastActionMessage, roomSnapshot.players, activePlayerId, activePlayer]);
 
   const updatePosition = (playerId: string, pos: number) => {
     displayedPositionsRef.current[playerId] = pos;
@@ -1112,9 +1174,16 @@ export function Board({
 
             {/* Active Action Ticker for Server Action Messages */}
             {!recentEventAlert && gameState?.lastActionMessage && !gameState.lastActionMessage.startsWith('Purchased') && !gameState.lastActionMessage.includes('Available to buy') && (
-              <div className="courtyard-action-ticker activity-feed-item" aria-live="polite">
-                <span className="activity-item-text ticker-text">{formatEventMessage(gameState.lastActionMessage)}</span>
-              </div>
+              (() => {
+                const formatted = formatEventMessage(gameState.lastActionMessage, roomSnapshot.players, activePlayer);
+                const isAlreadyInFeed = activityFeed.slice(-1).some((e) => e.text === formatted);
+                if (isAlreadyInFeed) return null;
+                return (
+                  <div className="courtyard-action-ticker activity-feed-item" aria-live="polite">
+                    <span className="activity-item-text ticker-text">{formatted}</span>
+                  </div>
+                );
+              })()
             )}
           </div>
 
