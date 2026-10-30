@@ -2289,26 +2289,6 @@ button:disabled {
   line-height: 1.2;
 }
 
-/* Disconnected Indicator (Icon + Timer) */
-.player-row-disconnected {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  color: #f87171;
-  font-size: 13px;
-  font-weight: 500;
-  font-family: var(--font-mono, monospace);
-  line-height: 1;
-}
-
-.disconnected-icon {
-  flex-shrink: 0;
-}
-
-.disconnected-timer {
-  letter-spacing: -0.2px;
-}
-
 /* Host Crown */
 .player-info-crown,
 .player-row-host-crown {
