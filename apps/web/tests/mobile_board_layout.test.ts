@@ -168,16 +168,23 @@ describe('Mobile Board Component Render Structure', () => {
     expect(html).toContain('$60');
     expect(html).toContain('$400');
 
-    // Courtyard Center Elements in recommended order
+    // Courtyard Center Elements in recommended order (turn notification removed from inside board)
     expect(html).toContain('board-courtyard-center');
-    expect(html).toContain('courtyard-turn-status-bar');
+    expect(html).not.toContain('courtyard-turn-status-bar');
     expect(html).toContain('courtyard-dice-stage');
     expect(html).toContain('tactile-dice-cube');
     expect(html).toContain('courtyard-action-controls');
     expect(html).toContain('id="btn-roll-dice"');
-    expect(html).toContain('courtyard-sub-actions-row');
+
+    // In-game Action Bar under the whole board
+    expect(html).toContain('board-bottom-actions-bar');
     expect(html).toContain('id="btn-open-trade"');
     expect(html).toContain('id="btn-declare-bankruptcy"');
+
+    // Player Information Menu in the below free space
+    expect(html).toContain('board-player-info-menu');
+    expect(html).toContain('player-info-card');
+    expect(html).toContain('player-info-turn-badge');
   });
 
   it('renders property ownership color strip without player nicknames inside tiles', () => {
@@ -358,7 +365,31 @@ describe('Mobile CSS Stylesheet Integrity Verification', () => {
     expect(css).toMatch(/\.test-bots-section-card\s*\{[^}]*overflow:\s*visible/);
   });
 
+  it('enforces compact mobile Roll Dice button, compact turn indicator badge, action bar, and player info menu under the board', () => {
+    expect(css).toMatch(/\.btn-roll-prominent[^}]*min-height:\s*3[02]px/);
+    expect(css).toMatch(/\.turn-indicator-badge\s*\{[^}]*font-size:\s*clamp\(1[01]/);
+    expect(css).toMatch(/\.board-bottom-actions-bar\s*\{[^}]*display:\s*flex/);
+    expect(css).toMatch(/\.btn-board-bottom-action\s*\{[^}]*min-height:\s*3[68]px/);
+    expect(css).toMatch(/\.board-player-info-menu\s*\{[^}]*display:\s*flex/);
+    expect(css).toMatch(/\.player-cash-delta-pill\.delta-increase/);
+    expect(css).toMatch(/\.player-cash-delta-pill\.delta-deduction/);
+  });
+
   it('preserves desktop board tabletop grid rules (> 1024px)', () => {
     expect(css).toMatch(/@media \(min-width:\s*1440px\)/);
+  });
+
+  it('enforces clean dual button layout and sr-only concealment preventing text overlap', () => {
+    expect(css).toMatch(/\.sr-only\s*\{[^}]*clip:\s*rect\(0,\s*0,\s*0,\s*0\)/);
+    expect(css).toMatch(/\.courtyard-action-buttons-row\s+#btn-decline-property\s*\{[^}]*display:\s*none\s*!important/);
+    expect(css).toMatch(/\.courtyard-action-buttons-row\s+\.btn-end-turn-action[^}]*min-width:\s*0\s*!important/);
+    expect(css).toMatch(/\.courtyard-action-buttons-row\s+\.btn-end-turn-action[^}]*max-width:\s*none\s*!important/);
+  });
+
+  it('hides top header chat and settings on mobile/tablet viewports and styles professional icons', () => {
+    expect(css).toMatch(/\.header-btn-desktop-only\s*\{[^}]*display:\s*none\s*!important/);
+    expect(css).toMatch(/\.header-svg-icon\s*\{[^}]*stroke:\s*currentColor/);
+    expect(css).toMatch(/\.header-tool-btn\.btn-leave-table/);
+    expect(css).toMatch(/\.header-tool-btn\.tool-btn-muted/);
   });
 });

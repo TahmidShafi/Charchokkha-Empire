@@ -642,39 +642,100 @@ export function GameRoom({
           <button
             type="button"
             id="btn-toggle-sound"
-            className={`header-tool-btn ${isMuted ? 'tool-btn-muted' : ''}`}
+            className={`header-tool-btn btn-sound-toggle ${isMuted ? 'tool-btn-muted' : ''}`}
             onClick={handleToggleMute}
             title={isMuted ? 'Unmute Sound Effects' : 'Mute Sound Effects'}
             aria-label={isMuted ? 'Unmute Sound Effects' : 'Mute Sound Effects'}
           >
-            <span>{isMuted ? '🔇' : '🔊'}</span>
+            {isMuted ? (
+              <svg
+                className="header-svg-icon icon-muted"
+                viewBox="0 0 24 24"
+                width="16"
+                height="16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                <line x1="22" y1="9" x2="16" y2="15" />
+                <line x1="16" y1="9" x2="22" y2="15" />
+              </svg>
+            ) : (
+              <svg
+                className="header-svg-icon icon-sound"
+                viewBox="0 0 24 24"
+                width="16"
+                height="16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+                <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+              </svg>
+            )}
             <span className="btn-label-desktop">{isMuted ? 'Muted' : 'Sound'}</span>
           </button>
 
-          {/* Chat Toggle (Desktop) */}
+          {/* Chat Toggle (Desktop Only) */}
           <button
             type="button"
-            className={`header-tool-btn ${isDesktopChatOpen ? 'tool-btn-active' : ''}`}
+            className={`header-tool-btn header-btn-desktop-only ${isDesktopChatOpen ? 'tool-btn-active' : ''}`}
             onClick={() => setIsDesktopChatOpen(!isDesktopChatOpen)}
             title="Toggle Chat Panel"
             aria-label="Toggle chat panel"
           >
-            <span>💬</span>
+            <svg
+              className="header-svg-icon"
+              viewBox="0 0 24 24"
+              width="15"
+              height="15"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+            </svg>
             <span className="btn-label-desktop">Chat</span>
             {chatMessages.length > 0 && (
               <span className="chat-counter-bubble">{chatMessages.length}</span>
             )}
           </button>
 
-          {/* Settings Toggle (Desktop) */}
+          {/* Settings Toggle (Desktop Only) */}
           <button
             type="button"
-            className={`header-tool-btn ${isDesktopSettingsOpen ? 'tool-btn-active' : ''}`}
+            className={`header-tool-btn header-btn-desktop-only ${isDesktopSettingsOpen ? 'tool-btn-active' : ''}`}
             onClick={() => setIsDesktopSettingsOpen(!isDesktopSettingsOpen)}
             title="Table Settings"
             aria-label="Table settings"
           >
-            <span>⚙️</span>
+            <svg
+              className="header-svg-icon"
+              viewBox="0 0 24 24"
+              width="15"
+              height="15"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <circle cx="12" cy="12" r="3" />
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+            </svg>
             <span className="btn-label-desktop">Settings</span>
             {isHost && <span className="host-crown-mini">👑</span>}
           </button>
@@ -688,7 +749,22 @@ export function GameRoom({
             title="Exit Table"
             aria-label="Exit Table"
           >
-            <span>🚪</span>
+            <svg
+              className="header-svg-icon icon-exit"
+              viewBox="0 0 24 24"
+              width="16"
+              height="16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <polyline points="16 17 21 12 16 7" />
+              <line x1="21" y1="12" x2="9" y2="12" />
+            </svg>
             <span className="btn-label-desktop">Leave</span>
           </button>
         </div>

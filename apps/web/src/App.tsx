@@ -63,6 +63,7 @@ export default function App() {
       const urlParams = new URLSearchParams(window.location.search);
       const isPrivateMock = urlParams.get('private') === '1';
       const isWaitingMock = urlParams.get('waiting') === '1';
+      const mockPhase = (urlParams.get('phase') as any) || 'need_roll';
       const mockSnap: RoomSnapshot = {
         code: 'TABLE1',
         hostId: 'p1',
@@ -92,7 +93,7 @@ export default function App() {
           turnOrder: ['p1', 'p2', 'p3', 'p4'],
           currentTurnIndex: 0,
           activePlayerId: 'p1',
-          turnPhase: 'action_pending',
+          turnPhase: mockPhase,
           lastDiceRoll: { die1: 4, die2: 3, total: 7, isDouble: false },
           startingSalary: 200,
           vacationPot: 150,

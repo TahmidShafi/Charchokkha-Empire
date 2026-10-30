@@ -13,6 +13,7 @@ export interface PlayerCharacterProps {
   tabIndex?: number;
   role?: string;
   ariaLabel?: string;
+  variant?: 'figurine' | 'blob';
 }
 
 /**
@@ -32,7 +33,74 @@ export const PlayerCharacter: React.FC<PlayerCharacterProps> = ({
   tabIndex,
   role,
   ariaLabel,
+  variant = 'figurine',
 }) => {
+  if (variant === 'blob') {
+    return (
+      <div
+        className={`player-character-wrapper character-blob-wrapper ${isSelected ? 'character-selected' : ''} ${
+          isTaken ? 'character-taken' : ''
+        } ${isHopping ? 'character-hopping' : ''} ${className}`}
+        style={
+          {
+            width: size,
+            height: size,
+            '--character-color': color,
+          } as React.CSSProperties
+        }
+        title={title}
+        onClick={onClick}
+        tabIndex={tabIndex}
+        role={role}
+        aria-label={ariaLabel}
+      >
+        {(isSelected || showGlow) && (
+          <div
+            className="character-glow-ring"
+            style={{
+              boxShadow: `0 0 12px ${color}`,
+              borderColor: color,
+              borderRadius: '50%',
+            }}
+            aria-hidden="true"
+          />
+        )}
+        <svg
+          viewBox="0 0 32 32"
+          width={size}
+          height={size}
+          className="character-blob-svg"
+          aria-hidden="true"
+        >
+          {/* Main Body Circle */}
+          <circle cx="16" cy="16" r="14.5" fill={color} />
+
+          {/* Top Googly Eye */}
+          <circle cx="20.5" cy="11.5" r="4.2" fill="#ffffff" />
+          <circle cx="22" cy="11.2" r="2.1" fill="#181326" />
+
+          {/* Bottom Googly Eye */}
+          <circle cx="20.5" cy="20.5" r="4.2" fill="#ffffff" />
+          <circle cx="22" cy="20.2" r="2.1" fill="#181326" />
+
+          {isTaken && (
+            <g className="character-taken-mark">
+              <line
+                x1="6"
+                y1="6"
+                x2="26"
+                y2="26"
+                stroke="#ef4444"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+              />
+            </g>
+          )}
+        </svg>
+      </div>
+    );
+  }
+
   const height = Math.round(size * 1.25);
 
   return (

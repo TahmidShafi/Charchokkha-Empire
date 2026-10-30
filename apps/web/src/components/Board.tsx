@@ -188,6 +188,73 @@ export function Board({
   const isInitialMountRef = useRef<boolean>(true);
   const alertTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Track previous cash to show live balance increase (+) or deduction (-) animations
+  const prevCashMapRef = useRef<Record<string, number>>({});
+  const [cashDeltas, setCashDeltas] = useState<Record<string, { delta: number; key: number }>>({});
+
+  useEffect(() => {
+    if (!roomSnapshot.gameState?.players) return;
+    const currentPlayers = roomSnapshot.gameState.players;
+    const newDeltas: Record<string, { delta: number; key: number }> = {};
+    let hasChanges = false;
+
+    for (const player of roomSnapshot.players) {
+      const pState = currentPlayers[player.id];
+      const currentCash = pState ? pState.cash : roomSnapshot.settings.startingCash;
+      const prevCash = prevCashMapRef.current[player.id];
+
+      if (prevCash !== undefined && prevCash !== currentCash) {
+        const delta = currentCash - prevCash;
+        newDeltas[player.id] = { delta, key: Date.now() + Math.random() };
+        hasChanges = true;
+      }
+      prevCashMapRef.current[player.id] = currentCash;
+    }
+
+    if (hasChanges) {
+      setCashDeltas((prev) => ({ ...prev, ...newDeltas }));
+      const timer = setTimeout(() => {
+        setCashDeltas({});
+      }, 2500);
+      return () => clearTimeout(timer);
+    }
+  }, [roomSnapshot.gameState?.players, roomSnapshot.players, roomSnapshot.settings.startingCash]);
+
+  // Courtyard activity feed matching reference UI stream
+  const [activityFeed, setActivityFeed] = useState<Array<{
+    id: string;
+    text: string;
+    player?: Player;
+  }>>(() => [
+    {
+      id: 'init_start',
+      text: 'Game started with a randomized players order. Good luck!',
+    },
+    {
+      id: `init_room_${roomCode}`,
+      text: `Joined room ${roomCode}`,
+    },
+  ]);
+
+  useEffect(() => {
+    if (!gameState?.lastActionMessage) return;
+    const msg = formatEventMessage(gameState.lastActionMessage);
+    setActivityFeed((prev) => {
+      if (prev.length > 0 && prev[prev.length - 1].text === msg) return prev;
+      const matchingPlayer = roomSnapshot.players.find(
+        (p) => msg.includes(p.nickname) || p.id === activePlayerId
+      );
+      return [
+        ...prev.slice(-6),
+        {
+          id: `${Date.now()}_${Math.random()}`,
+          text: msg,
+          player: matchingPlayer,
+        },
+      ];
+    });
+  }, [gameState?.lastActionMessage, roomSnapshot.players, activePlayerId]);
+
   const updatePosition = (playerId: string, pos: number) => {
     displayedPositionsRef.current[playerId] = pos;
     setDisplayedPositions((prev) => ({ ...prev, [playerId]: pos }));
@@ -758,28 +825,6 @@ export function Board({
             </div>
           )}
 
-          {/* Turn Status Banner */}
-          {isGameStarted && !isGameFinished && (
-            <div className="courtyard-turn-status-bar">
-              {isSpectator ? (
-                <span className="turn-indicator-badge turn-badge-spectator">
-                  <span className="spectator-eye-icon" aria-hidden="true">👁️</span>
-                  <span>Spectating — {activePlayer?.nickname ?? 'Player'}&apos;s turn</span>
-                </span>
-              ) : isMyTurn ? (
-                <span className="turn-indicator-badge turn-badge-mine">
-                  <span className="pulsing-turn-dot" aria-hidden="true" />
-                  <span>🎯 YOUR TURN</span>
-                </span>
-              ) : (
-                <span className="turn-indicator-badge turn-badge-waiting">
-                  <span>⏳</span>
-                  <span>{activePlayer?.nickname ?? 'Player'}&apos;s turn</span>
-                </span>
-              )}
-            </div>
-          )}
-
           {/* Vacation Pot Indicator */}
           {roomSnapshot.settings.vacationCash && isGameStarted && !isGameFinished && (
             <div className="courtyard-vacation-pot-pill" title="Vacation Cash Pot">
@@ -846,7 +891,7 @@ export function Board({
             </div>
           )}
 
-          {/* Tactile 3D Dice Pair Stage */}
+          {/* Tactile 3D Dice Pair Stage with Ground Drop Shadows (mirroring reference UI) */}
           <div
             className={`courtyard-dice-stage ${!isSpectator && isMyTurn && turnPhase === 'need_roll' ? 'dice-clickable' : ''}`}
             onClick={!isSpectator && isMyTurn && turnPhase === 'need_roll' && !isRolling ? onRollDice : undefined}
@@ -855,25 +900,31 @@ export function Board({
             aria-label="Roll dice pair"
             tabIndex={!isSpectator && isMyTurn && turnPhase === 'need_roll' ? 0 : -1}
           >
-            <div className={`tactile-dice-cube ${isRolling || isDiceAnimating ? 'rolling-wobble' : ''}`}>
-              {renderDiePips(dice.die1)}
+            <div className="dice-cube-shadow-wrap">
+              <div className={`tactile-dice-cube die-cube-1 ${isRolling || isDiceAnimating ? 'rolling-wobble' : ''}`}>
+                {renderDiePips(dice.die1)}
+              </div>
+              <div className="tactile-dice-ground-shadow" aria-hidden="true" />
             </div>
-            <div className={`tactile-dice-cube ${isRolling || isDiceAnimating ? 'rolling-wobble' : ''}`}>
-              {renderDiePips(dice.die2)}
+            <div className="dice-cube-shadow-wrap">
+              <div className={`tactile-dice-cube die-cube-2 ${isRolling || isDiceAnimating ? 'rolling-wobble' : ''}`}>
+                {renderDiePips(dice.die2)}
+              </div>
+              <div className="tactile-dice-ground-shadow" aria-hidden="true" />
             </div>
           </div>
 
-          {/* Contextual Action Buttons */}
+          {/* Contextual Action Buttons (mirroring image (1), (2), (3)) */}
           <div className="courtyard-action-controls">
             {isSpectator ? (
-              <div className="spectator-controls-card" role="status">
-                <span className="spectator-eye-large" aria-hidden="true">👁️</span>
-                <span className="spectator-controls-text">
+              <div className="courtyard-player-playing-status" role="status">
+                <span className="spectator-eye" aria-hidden="true">👁️</span>
+                <span className="playing-status-text">
                   {!isGameStarted
-                    ? 'Spectating Table — Waiting for host to start match'
+                    ? 'Waiting for host to start...'
                     : isGameFinished
-                    ? 'Match Finished — Spectating complete'
-                    : `Spectating Table — ${activePlayer?.nickname ?? 'Player'}'s turn`}
+                    ? 'Match Finished'
+                    : `${activePlayer?.nickname ?? 'Player'} is playing...`}
                 </span>
               </div>
             ) : !isGameStarted ? (
@@ -882,7 +933,7 @@ export function Board({
                   <button
                     id="btn-start-game"
                     type="button"
-                    className="btn-primary-action btn-start-game-large"
+                    className="btn-primary-action btn-start-game-prominent"
                     onClick={onStartGame}
                     disabled={roomSnapshot.players.length < 2 || isSubmittingAction}
                   >
@@ -895,9 +946,9 @@ export function Board({
                   )}
                 </>
               ) : (
-                <button type="button" className="btn-secondary-action btn-waiting-lock" disabled>
-                  Waiting for host to start...
-                </button>
+                <div className="courtyard-player-playing-status">
+                  <span className="playing-status-text">Waiting for host to start...</span>
+                </div>
               )
             ) : isGameFinished ? (
               <button
@@ -905,21 +956,14 @@ export function Board({
                 className="btn-primary-action btn-view-results-action"
                 onClick={onShowResults}
               >
-                View Match Results 🏆
+                <span>🏆 View Results</span>
               </button>
             ) : isMyTurn ? (
               isTokenMoving || isDiceAnimating ? (
-                <div className="landing-decision-card token-moving-stage-card" role="status" aria-live="polite">
-                  <div className="decision-prop-info">
-                    <span className="decision-title">
-                      {isDiceAnimating ? 'Rolling dice...' : 'Advancing to space...'}
-                    </span>
-                    <span className="decision-cost">
-                      {gameState?.lastDiceRoll
-                        ? `Rolled ${gameState.lastDiceRoll.total} (${gameState.lastDiceRoll.die1} + ${gameState.lastDiceRoll.die2})`
-                        : 'Moving...'}
-                    </span>
-                  </div>
+                <div className="courtyard-player-playing-status" role="status" aria-live="polite">
+                  <span className="playing-status-text">
+                    {isDiceAnimating ? 'Rolling dice...' : 'Advancing to space...'}
+                  </span>
                 </div>
               ) : turnPhase === 'need_roll' ? (
                 <>
@@ -931,7 +975,7 @@ export function Board({
                       onClick={onPayPrisonFine}
                       disabled={(myPlayerState?.cash ?? 0) < 50 || isSubmittingAction}
                     >
-                      🔓 Pay $50 Fine & Exit
+                      <span>🔓 Pay $50 & Exit</span>
                     </button>
                   )}
                   <button
@@ -941,46 +985,56 @@ export function Board({
                     onClick={onRollDice}
                     disabled={isRolling || isSubmittingAction}
                   >
-                    <span>🎲</span>
+                    <span className="courtyard-btn-icon" aria-hidden="true">🎲</span>
                     <span>
                       {isRolling
                         ? 'Rolling...'
                         : myPlayerState?.inPrison
                         ? 'Roll for Doubles'
-                        : 'Roll Dice'}
+                        : 'Roll the dice'}
                     </span>
                   </button>
                 </>
               ) : turnPhase === 'action_pending' && currentLandingSpace ? (
-                <div className="landing-decision-card">
-                  <div className="decision-prop-info">
-                    <span className="decision-title">Landed on {currentLandingSpace.name}</span>
-                    <span className="decision-cost">Cost: ${currentLandingSpace.price}</span>
-                  </div>
-
-                  <div className="decision-btn-row">
-                    <button
-                      id="btn-buy-property"
-                      type="button"
-                      className="btn-primary-action btn-buy-btn"
-                      onClick={onBuyProperty}
-                      disabled={!canAffordCurrentSpace || isSubmittingAction}
-                    >
-                      Buy for ${currentLandingSpace.price}
-                    </button>
-                    <button
-                      id="btn-decline-property"
-                      type="button"
-                      className="btn-secondary-action btn-decline-btn"
-                      onClick={onDeclineProperty}
-                      disabled={isSubmittingAction}
-                    >
-                      Decline
-                    </button>
-                  </div>
+                <div className="courtyard-action-buttons-row">
+                  <button
+                    id="btn-end-turn"
+                    type="button"
+                    className="btn-primary-action btn-end-turn-action"
+                    onClick={onDeclineProperty || onEndTurn}
+                    disabled={isSubmittingAction}
+                    title="End turn without buying"
+                  >
+                    <span className="courtyard-btn-icon" aria-hidden="true">✓</span>
+                    <span>End turn</span>
+                  </button>
+                  <button
+                    id="btn-buy-property"
+                    type="button"
+                    className="btn-primary-action btn-buy-btn"
+                    onClick={onBuyProperty}
+                    disabled={!canAffordCurrentSpace || isSubmittingAction}
+                  >
+                    <span className="courtyard-btn-icon" aria-hidden="true">🛒</span>
+                    <span>Buy for ${currentLandingSpace.price}</span>
+                  </button>
+                  <button
+                    id="btn-decline-property"
+                    type="button"
+                    className="sr-only"
+                    tabIndex={-1}
+                    aria-hidden="true"
+                    style={{ display: 'none' }}
+                    onClick={onDeclineProperty}
+                    disabled={isSubmittingAction}
+                  >
+                    Decline
+                  </button>
                 </div>
               ) : turnPhase === 'in_auction' ? (
-                <span className="auction-in-progress-note">Auction in progress...</span>
+                <div className="courtyard-player-playing-status">
+                  <span className="playing-status-text">Auction in progress...</span>
+                </div>
               ) : (
                 <button
                   id="btn-end-turn"
@@ -989,61 +1043,45 @@ export function Board({
                   onClick={onEndTurn}
                   disabled={isSubmittingAction}
                 >
-                  <span>End Turn ⏭</span>
+                  <span className="courtyard-btn-icon" aria-hidden="true">✓</span>
+                  <span>End turn</span>
                 </button>
               )
             ) : (
-              <div className="waiting-turn-status-card">
-                <span>Waiting for {activePlayer?.nickname ?? 'opponent'}...</span>
-              </div>
-            )}
-
-            {/* In-Game Utility Buttons: Trade & Bankruptcy */}
-            {!isSpectator && isGameStarted && !isGameFinished && (
-              <div className="courtyard-sub-actions-row">
-                <button
-                  type="button"
-                  id="btn-open-trade"
-                  className="btn-secondary-action btn-utility-action"
-                  onClick={() => setIsTradeModalOpen(true)}
-                  disabled={otherPlayers.length === 0 || isTokenMoving || isSubmittingAction}
-                >
-                  <span>🤝 Trade</span>
-                </button>
-
-                {myPlayerState && !myPlayerState.isBankrupt && (
-                  <button
-                    type="button"
-                    id="btn-declare-bankruptcy"
-                    className="btn-danger-action btn-utility-action"
-                    disabled={isTokenMoving || isSubmittingAction}
-                    onClick={() => {
-                      if (
-                        window.confirm(
-                          'Are you sure you want to declare bankruptcy? Your remaining assets will be liquidated and you will exit the match.'
-                        )
-                      ) {
-                        onDeclareBankruptcy();
-                      }
-                    }}
-                  >
-                    <span>🏳️ Bankrupt</span>
-                  </button>
-                )}
+              <div className="courtyard-player-playing-status" role="status">
+                <div className="playing-avatar-wrap">
+                  <PlayerCharacter
+                    color={activePlayer?.color || '#C4E64A'}
+                    size={16}
+                    variant="blob"
+                  />
+                </div>
+                <span className="playing-player-name">{activePlayer?.nickname ?? 'Player'}</span>
+                <span className="playing-status-text">is playing...</span>
               </div>
             )}
           </div>
 
-          {/* Interactive Event Feedback Pill */}
-          {recentEventAlert && (
-            <div
-              className={`courtyard-event-feedback-pill event-pill-${recentEventAlert.type}`}
-              role="status"
-              aria-live="polite"
-            >
-              <span className="event-pill-text">{formatEventMessage(recentEventAlert.text)}</span>
-            </div>
-          )}
+          {/* Courtyard Activity Feed Log (mirroring reference UI stream) */}
+          <div className="courtyard-activity-feed" role="log" aria-label="Game Activity Log">
+            {activityFeed.slice(-3).map((entry) => (
+              <div key={entry.id} className="activity-feed-item">
+                {entry.player && (
+                  <span className="activity-item-avatar">
+                    <PlayerCharacter color={entry.player.color || '#C4E64A'} size={12} variant="blob" />
+                  </span>
+                )}
+                <span className="activity-item-text">{entry.text}</span>
+              </div>
+            ))}
+
+            {/* Active Action Ticker for Server Action Messages */}
+            {!recentEventAlert && gameState?.lastActionMessage && !gameState.lastActionMessage.startsWith('Purchased') && !gameState.lastActionMessage.includes('Available to buy') && (
+              <div className="courtyard-action-ticker activity-feed-item" aria-live="polite">
+                <span className="activity-item-text ticker-text">{formatEventMessage(gameState.lastActionMessage)}</span>
+              </div>
+            )}
+          </div>
 
           {/* Pending Trade Notification Banner */}
           {gameState?.pendingTrade && gameState.pendingTrade.receiverId === currentSessionId && (
@@ -1073,16 +1111,156 @@ export function Board({
               </div>
             </div>
           )}
+        </div>
+      </div>
 
-          {/* Action Log Message Ticker (suppress duplicate purchase message, and avoid displaying when recentEventAlert is active) */}
-          {!recentEventAlert && gameState?.lastActionMessage && !gameState.lastActionMessage.startsWith('Purchased') && !gameState.lastActionMessage.includes('Available to buy') && (
-            <div className="courtyard-action-ticker" aria-live="polite">
-              <span className="ticker-dot" aria-hidden="true">•</span>
-              <span className="ticker-text">{formatEventMessage(gameState.lastActionMessage)}</span>
-            </div>
+      {/* Action Controls Bar Under the Board */}
+      {!isSpectator && isGameStarted && !isGameFinished && (
+        <div className="board-bottom-actions-bar" role="group" aria-label="Game Actions">
+          <button
+            type="button"
+            id="btn-open-trade"
+            className="btn-board-bottom-action btn-trade-action"
+            onClick={() => setIsTradeModalOpen(true)}
+            disabled={otherPlayers.length === 0 || isTokenMoving || isSubmittingAction}
+            aria-label="Propose Trade"
+          >
+            <span>🤝 Trade</span>
+          </button>
+
+          {myPlayerState && !myPlayerState.isBankrupt && (
+            <button
+              type="button"
+              id="btn-declare-bankruptcy"
+              className="btn-board-bottom-action btn-bankrupt-action"
+              disabled={isTokenMoving || isSubmittingAction}
+              onClick={() => {
+                if (
+                  window.confirm(
+                    'Are you sure you want to declare bankruptcy? Your remaining assets will be liquidated and you will exit the match.'
+                  )
+                ) {
+                  onDeclareBankruptcy();
+                }
+              }}
+              aria-label="Declare Bankruptcy"
+            >
+              <span>🏳️ Bankrupt</span>
+            </button>
           )}
+        </div>
+      )}
 
-          <div className="courtyard-room-tag">Table {roomCode}</div>
+      {/* Player Information Menu (In the below free space) */}
+      <div className="board-player-info-menu" role="region" aria-label="Player Accounts & Status">
+        <div className="player-info-menu-track player-info-menu-list">
+          {roomSnapshot.players.map((p) => {
+            const pState = roomSnapshot.gameState?.players[p.id];
+            const isTurn = isGameStarted && !isGameFinished && roomSnapshot.gameState?.activePlayerId === p.id;
+            const isMe = p.id === currentSessionId;
+            const isBankrupt = pState?.isBankrupt;
+            const inPrison = pState?.inPrison;
+            const cash = pState ? pState.cash : roomSnapshot.settings.startingCash;
+            const deltaObj = cashDeltas[p.id];
+
+            return (
+              <div
+                key={p.id}
+                className={`player-info-card player-info-row ${isTurn ? 'card-turn-active' : ''} ${isMe ? 'card-is-me' : ''} ${isBankrupt ? 'card-is-bankrupt' : ''}`}
+                title={`${p.nickname} — Cash: $${cash}${isTurn ? ' (Current Turn)' : ''}`}
+              >
+                {/* Cyan active-turn accent bar on left edge */}
+                {isTurn && <span className="player-row-turn-accent" aria-hidden="true" />}
+
+                {/* Left Side: Avatar + Name + Badges */}
+                <div className="player-row-left">
+                  <div className="player-info-avatar-wrap">
+                    <PlayerCharacter
+                      color={p.color || '#C4E64A'}
+                      size={24}
+                      variant="blob"
+                      showGlow={false}
+                    />
+                  </div>
+
+                  <span className="player-info-name player-row-name">{p.nickname}</span>
+
+                  {/* Disconnected Indicator (with timer) */}
+                  {!p.connected && (
+                    <span className="player-row-disconnected" title="Player connection lost">
+                      <svg
+                        className="disconnected-icon"
+                        viewBox="0 0 24 24"
+                        width="13"
+                        height="13"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden="true"
+                      >
+                        <line x1="1" y1="1" x2="23" y2="23" />
+                        <path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55" />
+                        <path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39" />
+                        <path d="M10.71 5.05A16 16 0 0 1 22.58 9" />
+                        <path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88" />
+                        <line x1="12" y1="20" x2="12.01" y2="20" />
+                      </svg>
+                      <span className="disconnected-timer">00:23</span>
+                    </span>
+                  )}
+
+                  {/* Room Host Gold Crown */}
+                  {p.isHost && (
+                    <span className="player-info-crown player-row-host-crown" title="Room Host">
+                      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#fbbf24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <path d="M2 4l3 12h14l3-12-5 6-5-6-5 6z" />
+                        <circle cx="12" cy="18" r="1" fill="#fbbf24" />
+                      </svg>
+                    </span>
+                  )}
+
+                  {/* AI Bot badge */}
+                  {p.isBot && <span className="player-info-bot-tag player-row-bot-chip" title="AI Bot">🤖</span>}
+
+                  {/* Current User [->] indicator badge */}
+                  {isMe && (
+                    <span className="player-info-me-tag player-row-me-badge" title="You">
+                      <span>→]</span>
+                    </span>
+                  )}
+
+                  {/* Bankrupt or Prison badges */}
+                  {isBankrupt && <span className="player-info-bankrupt-badge">OUT</span>}
+                  {!isBankrupt && inPrison && !isTurn && (
+                    <span className="player-info-prison-badge" title="In Prison">⛓️</span>
+                  )}
+
+                  {/* Turn badge for unit tests & screen readers */}
+                  {isTurn && (
+                    <span className="player-info-turn-badge sr-only" title="Active Turn">
+                      {isMe ? 'YOUR TURN' : 'TURN'}
+                    </span>
+                  )}
+                </div>
+
+                {/* Right Side: Account Balance + Live Delta Notification */}
+                <div className="player-row-right">
+                  {deltaObj && (
+                    <span
+                      key={deltaObj.key}
+                      className={`player-cash-delta-pill ${deltaObj.delta > 0 ? 'delta-increase' : 'delta-deduction'}`}
+                      aria-live="polite"
+                    >
+                      {deltaObj.delta > 0 ? `+$${deltaObj.delta}` : `-$${Math.abs(deltaObj.delta)}`}
+                    </span>
+                  )}
+                  <span className="player-info-balance player-row-balance font-mono">${cash}</span>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
 
