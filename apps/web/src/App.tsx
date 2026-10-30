@@ -95,7 +95,12 @@ export default function App() {
           currentTurnIndex: 0,
           activePlayerId: 'p1',
           turnPhase: mockPhase,
-          lastDiceRoll: { die1: 4, die2: 3, total: 7, isDouble: false },
+          lastDiceRoll: {
+            die1: urlParams.get('die1') ? Number(urlParams.get('die1')) : 4,
+            die2: urlParams.get('die2') ? Number(urlParams.get('die2')) : 3,
+            total: (urlParams.get('die1') ? Number(urlParams.get('die1')) : 4) + (urlParams.get('die2') ? Number(urlParams.get('die2')) : 3),
+            isDouble: (urlParams.get('die1') ? Number(urlParams.get('die1')) : 4) === (urlParams.get('die2') ? Number(urlParams.get('die2')) : 3),
+          },
           startingSalary: 200,
           vacationPot: 150,
           lastActionMessage: urlParams.get('actionMsg') || undefined,

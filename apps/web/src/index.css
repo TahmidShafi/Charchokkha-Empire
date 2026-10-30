@@ -1665,15 +1665,6 @@ button:disabled {
 
 /* Tactile 3D Dice Stage (mirroring reference UI image (1), (2), (3)) */
 .courtyard-dice-stage {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 14px;
-  margin: 2px 0 6px;
-  position: relative;
-}
-
-.courtyard-dice-stage {
   --dice-size: clamp(34px, 4.8vw, 42px);
   --half-dice: calc(var(--dice-size) / 2);
   display: flex;
@@ -1683,6 +1674,8 @@ button:disabled {
   perspective: 450px;
   user-select: none;
   position: relative;
+  margin: 4px 0 14px;
+  padding-bottom: 6px;
 }
 
 .courtyard-dice-stage.dice-clickable {
@@ -1695,7 +1688,7 @@ button:disabled {
   align-items: center;
   position: relative;
   width: var(--dice-size);
-  height: var(--dice-size);
+  height: calc(var(--dice-size) + 8px);
   perspective: 450px;
 }
 
@@ -1765,11 +1758,11 @@ button:disabled {
 
 /* Cube face rotations: orient value V to the TOP face */
 .tactile-dice-cube.val-1 { transform: rotateX(0deg) rotateY(0deg) rotateZ(0deg); }
+.tactile-dice-cube.val-2 { transform: rotateX(90deg) rotateY(0deg) rotateZ(0deg); }
+.tactile-dice-cube.val-3 { transform: rotateX(0deg) rotateY(0deg) rotateZ(-90deg); }
+.tactile-dice-cube.val-4 { transform: rotateX(0deg) rotateY(0deg) rotateZ(90deg); }
+.tactile-dice-cube.val-5 { transform: rotateX(-90deg) rotateY(0deg) rotateZ(0deg); }
 .tactile-dice-cube.val-6 { transform: rotateX(180deg) rotateY(0deg) rotateZ(0deg); }
-.tactile-dice-cube.val-2 { transform: rotateX(-90deg) rotateY(0deg) rotateZ(0deg); }
-.tactile-dice-cube.val-5 { transform: rotateX(90deg) rotateY(0deg) rotateZ(0deg); }
-.tactile-dice-cube.val-3 { transform: rotateX(0deg) rotateY(0deg) rotateZ(90deg); }
-.tactile-dice-cube.val-4 { transform: rotateX(0deg) rotateY(0deg) rotateZ(-90deg); }
 
 /* Isometric viewing angle: looking from above so TOP, LEFT-SIDE, and RIGHT-SIDE are visible */
 .die-cube-1 .dice-tumbler {
@@ -3448,8 +3441,9 @@ button:disabled {
 
   .courtyard-dice-stage {
     --dice-size: 27px;
-    gap: 8px;
-    margin: 2px 0 4px;
+    gap: 10px;
+    margin: 4px 0 10px;
+    padding-bottom: 4px;
   }
 
   .tactile-dice-cube {
@@ -4004,8 +3998,9 @@ button:disabled {
 
   .courtyard-dice-stage {
     --dice-size: 25px;
-    margin: 0;
-    gap: 5px;
+    margin: 3px 0 8px;
+    padding-bottom: 3px;
+    gap: 6px;
   }
 
   .tactile-dice-cube {

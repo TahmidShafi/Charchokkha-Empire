@@ -58,4 +58,19 @@ describe('Dice Roll and Token Movement Lifecycle Suite', () => {
   it('queries prefersReducedMotion without throwing', () => {
     expect(typeof prefersReducedMotion()).toBe('boolean');
   });
+
+  it('verifies 3D tactile dice face orientation transforms in CSS', async () => {
+    const fs = await import('node:fs');
+    const pathMod = await import('node:path');
+    const cssPath = pathMod.resolve(__dirname, '../src/index.css');
+    const css = fs.readFileSync(cssPath, 'utf-8');
+
+    // Each value 1-6 must correctly orient that face to the TOP
+    expect(css).toMatch(/\.tactile-dice-cube\.val-1\s*\{[^}]*rotateX\(0deg\)/);
+    expect(css).toMatch(/\.tactile-dice-cube\.val-2\s*\{[^}]*rotateX\(90deg\)/);
+    expect(css).toMatch(/\.tactile-dice-cube\.val-3\s*\{[^}]*rotateZ\(-90deg\)/);
+    expect(css).toMatch(/\.tactile-dice-cube\.val-4\s*\{[^}]*rotateZ\(90deg\)/);
+    expect(css).toMatch(/\.tactile-dice-cube\.val-5\s*\{[^}]*rotateX\(-90deg\)/);
+    expect(css).toMatch(/\.tactile-dice-cube\.val-6\s*\{[^}]*rotateX\(180deg\)/);
+  });
 });
