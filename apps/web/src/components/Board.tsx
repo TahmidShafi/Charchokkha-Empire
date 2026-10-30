@@ -306,7 +306,7 @@ export function Board({
           if (diceTimeoutRef.current) clearTimeout(diceTimeoutRef.current);
           diceTimeoutRef.current = setTimeout(() => {
             setIsDiceAnimating(false);
-          }, 320);
+          }, 550);
         }
       }
     }
@@ -912,15 +912,37 @@ export function Board({
             aria-label="Roll dice pair"
             tabIndex={!isSpectator && isMyTurn && turnPhase === 'need_roll' ? 0 : -1}
           >
-            <div className="dice-cube-shadow-wrap">
-              <div className={`tactile-dice-cube die-cube-1 ${isRolling || isDiceAnimating ? 'rolling-wobble' : ''}`}>
-                {renderDiePips(dice.die1)}
+            <div className={`dice-cube-shadow-wrap die-cube-1 ${isRolling || isDiceAnimating ? 'is-rolling' : ''}`}>
+              <div className="dice-tumbler">
+                <div
+                  className={`tactile-dice-cube val-${dice.die1}`}
+                  role="img"
+                  aria-label={`Die 1: ${dice.die1}`}
+                >
+                  <div className="dice-face face-1">{renderDiePips(1)}</div>
+                  <div className="dice-face face-2">{renderDiePips(2)}</div>
+                  <div className="dice-face face-3">{renderDiePips(3)}</div>
+                  <div className="dice-face face-4">{renderDiePips(4)}</div>
+                  <div className="dice-face face-5">{renderDiePips(5)}</div>
+                  <div className="dice-face face-6">{renderDiePips(6)}</div>
+                </div>
               </div>
               <div className="tactile-dice-ground-shadow" aria-hidden="true" />
             </div>
-            <div className="dice-cube-shadow-wrap">
-              <div className={`tactile-dice-cube die-cube-2 ${isRolling || isDiceAnimating ? 'rolling-wobble' : ''}`}>
-                {renderDiePips(dice.die2)}
+            <div className={`dice-cube-shadow-wrap die-cube-2 ${isRolling || isDiceAnimating ? 'is-rolling' : ''}`}>
+              <div className="dice-tumbler">
+                <div
+                  className={`tactile-dice-cube val-${dice.die2}`}
+                  role="img"
+                  aria-label={`Die 2: ${dice.die2}`}
+                >
+                  <div className="dice-face face-1">{renderDiePips(1)}</div>
+                  <div className="dice-face face-2">{renderDiePips(2)}</div>
+                  <div className="dice-face face-3">{renderDiePips(3)}</div>
+                  <div className="dice-face face-4">{renderDiePips(4)}</div>
+                  <div className="dice-face face-5">{renderDiePips(5)}</div>
+                  <div className="dice-face face-6">{renderDiePips(6)}</div>
+                </div>
               </div>
               <div className="tactile-dice-ground-shadow" aria-hidden="true" />
             </div>
