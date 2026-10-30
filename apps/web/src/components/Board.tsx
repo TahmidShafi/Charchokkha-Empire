@@ -3,6 +3,7 @@ import {
   BOARD_SPACES,
   getSpaceBadge,
   formatTileDisplayName,
+  PROPERTY_GROUP_COLORS,
   type BoardSpace,
 } from '../boardData';
 import { getBoardSpace, getGroupSpaces, hasColorMonopoly } from '@charchokkha/game-engine';
@@ -186,6 +187,150 @@ export interface BoardProps {
   isRolling: boolean;
   isSubmittingAction?: boolean;
   onShowResults?: () => void;
+}
+
+export interface PopoverPlacement {
+  edge: 'top' | 'right' | 'bottom' | 'left' | 'corner-tl' | 'corner-tr' | 'corner-br' | 'corner-bl';
+  cardStyle: React.CSSProperties;
+  notchClass: string;
+  notchStyle: React.CSSProperties;
+}
+
+export function getPopoverPlacement(spaceId: number): PopoverPlacement {
+  const cornerFr = 1.4;
+  const middleFr = 9;
+  const totalFr = cornerFr * 2 + middleFr; // 11.8
+  const cornerPct = (cornerFr / totalFr) * 100; // ~11.864%
+  const middlePct = (middleFr / totalFr) * 100; // ~76.271%
+  const tilePct = middlePct / 11; // ~6.934%
+
+  if (spaceId === 0) {
+    return {
+      edge: 'corner-tl',
+      cardStyle: { top: '12%', left: '12%' },
+      notchClass: 'popover-notch-up',
+      notchStyle: { top: '-7px', left: '24px', transform: 'translateX(-50%) rotate(45deg)' },
+    };
+  }
+  if (spaceId === 12) {
+    return {
+      edge: 'corner-tr',
+      cardStyle: { top: '12%', right: '12%' },
+      notchClass: 'popover-notch-up',
+      notchStyle: { top: '-7px', right: '24px', transform: 'translateX(50%) rotate(45deg)' },
+    };
+  }
+  if (spaceId === 24) {
+    return {
+      edge: 'corner-br',
+      cardStyle: { bottom: '12%', right: '12%' },
+      notchClass: 'popover-notch-down',
+      notchStyle: { bottom: '-7px', right: '24px', transform: 'translateX(50%) rotate(45deg)' },
+    };
+  }
+  if (spaceId === 36) {
+    return {
+      edge: 'corner-bl',
+      cardStyle: { bottom: '12%', left: '12%' },
+      notchClass: 'popover-notch-down',
+      notchStyle: { bottom: '-7px', left: '24px', transform: 'translateX(-50%) rotate(45deg)' },
+    };
+  }
+
+  // Top Edge Track (Spaces 1 to 11)
+  if (spaceId >= 1 && spaceId <= 11) {
+    const pct = cornerPct + (spaceId - 1 + 0.5) * tilePct;
+    const clampedPct = Math.max(24, Math.min(76, pct));
+    return {
+      edge: 'top',
+      cardStyle: {
+        top: '12%',
+        left: `${clampedPct}%`,
+        transform: 'translateX(-50%)',
+      },
+      notchClass: 'popover-notch-up',
+      notchStyle: {
+        top: '-7px',
+        left: `clamp(20px, calc(50% + ${(pct - clampedPct) * 2.8}px), calc(100% - 20px))`,
+        transform: 'translateX(-50%) rotate(45deg)',
+      },
+    };
+  }
+
+  // Right Edge Track (Spaces 13 to 23)
+  if (spaceId >= 13 && spaceId <= 23) {
+    const pct = cornerPct + (spaceId - 13 + 0.5) * tilePct;
+    const clampedPct = Math.max(24, Math.min(76, pct));
+    return {
+      edge: 'right',
+      cardStyle: {
+        right: '12%',
+        top: `${clampedPct}%`,
+        transform: 'translateY(-50%)',
+      },
+      notchClass: 'popover-notch-right',
+      notchStyle: {
+        right: '-7px',
+        top: `clamp(20px, calc(50% + ${(pct - clampedPct) * 2.8}px), calc(100% - 20px))`,
+        transform: 'translateY(-50%) rotate(45deg)',
+      },
+    };
+  }
+
+  // Bottom Edge Track (Spaces 25 to 35, rendered reversed: 35 at left, 25 at right)
+  if (spaceId >= 25 && spaceId <= 35) {
+    const pct = cornerPct + (35 - spaceId + 0.5) * tilePct;
+    const clampedPct = Math.max(24, Math.min(76, pct));
+    return {
+      edge: 'bottom',
+      cardStyle: {
+        bottom: '12%',
+        left: `${clampedPct}%`,
+        transform: 'translateX(-50%)',
+      },
+      notchClass: 'popover-notch-down',
+      notchStyle: {
+        bottom: '-7px',
+        left: `clamp(20px, calc(50% + ${(pct - clampedPct) * 2.8}px), calc(100% - 20px))`,
+        transform: 'translateX(-50%) rotate(45deg)',
+      },
+    };
+  }
+
+  // Left Edge Track (Spaces 37 to 47, rendered reversed: 47 at top, 37 at bottom)
+  if (spaceId >= 37 && spaceId <= 47) {
+    const pct = cornerPct + (47 - spaceId + 0.5) * tilePct;
+    const clampedPct = Math.max(24, Math.min(76, pct));
+    return {
+      edge: 'left',
+      cardStyle: {
+        left: '12%',
+        top: `${clampedPct}%`,
+        transform: 'translateY(-50%)',
+      },
+      notchClass: 'popover-notch-left',
+      notchStyle: {
+        left: '-7px',
+        top: `clamp(20px, calc(50% + ${(pct - clampedPct) * 2.8}px), calc(100% - 20px))`,
+        transform: 'translateY(-50%) rotate(45deg)',
+      },
+    };
+  }
+
+  return {
+    edge: 'bottom',
+    cardStyle: {
+      bottom: '12%',
+      left: '50%',
+      transform: 'translateX(-50%)',
+    },
+    notchClass: 'popover-notch-down',
+    notchStyle: {
+      bottom: '-7px',
+      left: '50%',
+      transform: 'translateX(-50%) rotate(45deg)',
+    },
+  };
 }
 
 export function Board({
@@ -621,6 +766,12 @@ export function Board({
 
     canSellOnSelected = curHouses > 0 && curHouses === maxHouses;
   }
+
+  const popoverPlacement = selectedSpace ? getPopoverPlacement(selectedSpace.id) : null;
+  const ownedAirportsCount = selectedPropRecord?.ownerId
+    ? [6, 18, 30, 42].filter((id) => getPropertyInfo(id)?.ownerId === selectedPropRecord.ownerId).length
+    : 0;
+  const currentHouses = selectedPropRecord?.houses ?? 0;
 
   const winnerPlayer = gameState?.winnerId
     ? roomSnapshot.players.find((p: Player) => p.id === gameState.winnerId)
@@ -1218,6 +1369,306 @@ export function Board({
             </div>
           )}
         </div>
+
+        {/* Interactive Property Details Popover Tooltip (Mirroring Reference UI) */}
+        {selectedSpace && popoverPlacement && (
+          <>
+            <div
+              className="popover-backdrop-scrim"
+              onClick={() => setSelectedSpaceId(null)}
+              aria-hidden="true"
+            />
+            <div
+              className="dialog-card-surface prop-inspector-card prop-popover-card"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="prop-popover-title"
+              style={popoverPlacement.cardStyle}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Directional Notch pointing directly at clicked space */}
+              <div
+                className={`popover-notch ${popoverPlacement.notchClass}`}
+                style={popoverPlacement.notchStyle}
+                aria-hidden="true"
+              />
+
+              {/* Close Button */}
+              <button
+                type="button"
+                className="popover-close-btn"
+                onClick={() => setSelectedSpaceId(null)}
+                aria-label="Close property details"
+              >
+                ✕
+              </button>
+
+              <div className="popover-card-scrollable">
+                {/* Top Section / Header */}
+              <div className="popover-header-center">
+                {selectedSpace.type === 'airport' && (
+                  <svg
+                    viewBox="0 0 24 24"
+                    width="34"
+                    height="34"
+                    fill="#38bdf8"
+                    className="popover-cyan-glow-icon"
+                    aria-hidden="true"
+                  >
+                    <path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z" />
+                  </svg>
+                )}
+                {selectedSpace.type === 'utility' && (
+                  <svg
+                    viewBox="0 0 32 32"
+                    width="34"
+                    height="34"
+                    fill="none"
+                    className="popover-cyan-glow-icon"
+                    aria-hidden="true"
+                  >
+                    <rect x="13" y="3.5" width="6" height="3" rx="1.5" fill="#38bdf8" />
+                    <line x1="16" y1="6.5" x2="16" y2="9.5" stroke="#38bdf8" strokeWidth="2.5" strokeLinecap="round" />
+                    <path d="M8 9.5h16c1.1 0 2 .9 2 2v3c0 .55-.45 1-1 1h-2v1.5c0 1.66-1.34 3-3 3h-2c-.55 0-1-.45-1-1v-3.5H8c-1.1 0-2-.9-2-2v-1c0-1.66 1.34-3 3-3z" fill="#38bdf8" />
+                    <path d="M17.5 24.5c0 1.38-1.12 2.5-2.5 2.5s-2.5-1.12-2.5-2.5c0-1.2 1.8-3.5 2.5-4.2.7.7 2.5 3 2.5 4.2z" fill="#38bdf8" />
+                  </svg>
+                )}
+                {selectedSpace.group && PROPERTY_GROUP_COLORS[selectedSpace.group] && (
+                  <div
+                    className="popover-group-strip"
+                    style={{
+                      backgroundColor: PROPERTY_GROUP_COLORS[selectedSpace.group],
+                      boxShadow: `0 0 10px ${PROPERTY_GROUP_COLORS[selectedSpace.group]}99`,
+                    }}
+                    aria-hidden="true"
+                  />
+                )}
+                <h2 id="prop-popover-title" className="popover-title">
+                  {selectedSpace.type === 'airport'
+                    ? `${formatTileDisplayName(selectedSpace)} Airport`
+                    : selectedSpace.name}
+                </h2>
+                {isSpectator && (
+                  <span className="prop-spectator-chip">
+                    <EyeIcon size={12} style={{ marginRight: 4, verticalAlign: 'middle' }} />
+                    Spectating
+                  </span>
+                )}
+              </div>
+
+              {/* Airport Table Layout (Mirroring Reference 1) */}
+              {selectedSpace.type === 'airport' && (
+                <div className="popover-table">
+                  <div className="popover-table-header">
+                    <span className="popover-col-header col-when">when</span>
+                    <span className="popover-col-header col-get">get</span>
+                  </div>
+                  <div className="popover-table-body">
+                    <div className={`popover-table-row ${ownedAirportsCount === 1 ? 'row-active' : ''}`}>
+                      <span className="row-desc">one airport is owned</span>
+                      <span className="row-value font-mono"><span className="row-currency">$</span> 25</span>
+                    </div>
+                    <div className={`popover-table-row ${ownedAirportsCount === 2 ? 'row-active' : ''}`}>
+                      <span className="row-desc">2 airports are owned</span>
+                      <span className="row-value font-mono"><span className="row-currency">$</span> 50</span>
+                    </div>
+                    <div className={`popover-table-row ${ownedAirportsCount === 3 ? 'row-active' : ''}`}>
+                      <span className="row-desc">3 airports are owned</span>
+                      <span className="row-value font-mono"><span className="row-currency">$</span> 100</span>
+                    </div>
+                    <div className={`popover-table-row ${ownedAirportsCount === 4 ? 'row-active' : ''}`}>
+                      <span className="row-desc">4 airports are owned</span>
+                      <span className="row-value font-mono"><span className="row-currency">$</span> 200</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Utility Rules Layout (Mirroring Reference 2) */}
+              {selectedSpace.type === 'utility' && (
+                <div className="popover-utility-rules">
+                  <div className="utility-rule-pair">
+                    <div className="rule-cond">If one company is owned,</div>
+                    <div className="rule-get font-mono">
+                      <span>get $4 x</span>
+                      <span className="rule-dice-icon" aria-label="Dice">🎲</span>
+                    </div>
+                  </div>
+                  <div className="utility-rule-pair">
+                    <div className="rule-cond">If two companies are owned,</div>
+                    <div className="rule-get font-mono">
+                      <span>get $10 x</span>
+                      <span className="rule-dice-icon" aria-label="Dice">🎲</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Property Improvements Table Layout (Mirroring Reference 3) */}
+              {selectedSpace.type === 'property' && selectedSpace.rentTiers && (
+                <div className="popover-table">
+                  <div className="popover-table-header">
+                    <span className="popover-col-header col-when">when</span>
+                    <span className="popover-col-header col-get">get</span>
+                  </div>
+                  <div className="popover-table-body">
+                    <div className={`popover-table-row ${currentHouses === 0 && selectedPropRecord ? 'row-active' : ''}`}>
+                      <span className="row-desc">with rent</span>
+                      <span className="row-value font-mono"><span className="row-currency">$</span> {selectedSpace.rentTiers[0]}</span>
+                    </div>
+                    <div className={`popover-table-row ${currentHouses === 1 ? 'row-active' : ''}`}>
+                      <span className="row-desc">with one house</span>
+                      <span className="row-value font-mono"><span className="row-currency">$</span> {selectedSpace.rentTiers[1]}</span>
+                    </div>
+                    <div className={`popover-table-row ${currentHouses === 2 ? 'row-active' : ''}`}>
+                      <span className="row-desc">with two houses</span>
+                      <span className="row-value font-mono"><span className="row-currency">$</span> {selectedSpace.rentTiers[2]}</span>
+                    </div>
+                    <div className={`popover-table-row ${currentHouses === 3 ? 'row-active' : ''}`}>
+                      <span className="row-desc">with three houses</span>
+                      <span className="row-value font-mono"><span className="row-currency">$</span> {selectedSpace.rentTiers[3]}</span>
+                    </div>
+                    <div className={`popover-table-row ${currentHouses === 4 ? 'row-active' : ''}`}>
+                      <span className="row-desc">with four houses</span>
+                      <span className="row-value font-mono"><span className="row-currency">$</span> {selectedSpace.rentTiers[4]}</span>
+                    </div>
+                    <div className={`popover-table-row ${currentHouses === 5 ? 'row-active' : ''}`}>
+                      <span className="row-desc">with a hotel</span>
+                      <span className="row-value font-mono"><span className="row-currency">$</span> {selectedSpace.rentTiers[5]}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Special Spaces (Tax / Cards / Corners) */}
+              {(selectedSpace.type === 'tax' ||
+                selectedSpace.type === 'treasure' ||
+                selectedSpace.type === 'surprise' ||
+                selectedSpace.type === 'corner') && (
+                <div className="popover-special-desc">
+                  {selectedSpace.type === 'tax' && (
+                    <p>When landing on this space, player pays tax to the bank.</p>
+                  )}
+                  {selectedSpace.type === 'treasure' && (
+                    <p>Draw a Treasure Chest card when landing on this space.</p>
+                  )}
+                  {selectedSpace.type === 'surprise' && (
+                    <p>Draw a Surprise card when landing on this space.</p>
+                  )}
+                  {selectedSpace.type === 'corner' && (
+                    <p>{selectedSpace.subtext ?? 'Corner landmark space.'}</p>
+                  )}
+                </div>
+              )}
+
+              {/* Divider Line */}
+              <div className="popover-divider" />
+
+              {/* Footer Section */}
+              {selectedSpace.type === 'property' ? (
+                /* 3-Column Footer matching Reference 3 */
+                <div className="popover-footer-grid">
+                  <div className="footer-col">
+                    <span className="footer-label">Price</span>
+                    <span className="footer-price font-mono"><span className="row-currency">$</span> {selectedSpace.price ?? 0}</span>
+                  </div>
+                  <div className="footer-col">
+                    <span className="footer-label" title="House improvement cost">
+                      <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true">
+                        <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z" />
+                      </svg>
+                    </span>
+                    <span className="footer-price font-mono"><span className="row-currency">$</span> {selectedSpace.houseCost ?? 0}</span>
+                  </div>
+                  <div className="footer-col">
+                    <span className="footer-label" title="Hotel improvement cost">
+                      <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true">
+                        <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-2 10h-2v-2h2v2zm0-4h-2V7h2v2zm-4 4h-2v-2h2v2zm0-4h-2V7h2v2zm-4 4H7v-2h2v2zm0-4H7V7h2v2z" />
+                      </svg>
+                    </span>
+                    <span className="footer-price font-mono"><span className="row-currency">$</span> {selectedSpace.houseCost ?? 0}</span>
+                  </div>
+                </div>
+              ) : (
+                /* Single Center Footer matching Reference 1 & 2 */
+                <div className="popover-footer-single">
+                  <span className="footer-label">Price</span>
+                  <span className="footer-price font-mono"><span className="row-currency">$</span> {selectedSpace.price ?? 0}</span>
+                </div>
+              )}
+
+              {/* Ownership Badge */}
+              {(selectedSpace.type === 'property' || selectedSpace.type === 'airport' || selectedSpace.type === 'utility') && (
+                <div className="popover-ownership-row">
+                  {selectedOwner ? (
+                    <div className="owner-chip" style={{ borderColor: `${selectedOwner.color}55` }}>
+                      <PlayerCharacter color={selectedOwner.color} size={15} />
+                      <span className="owner-name" style={{ color: selectedOwner.color }}>
+                        {selectedOwner.nickname}
+                      </span>
+                      {selectedPropRecord?.isMortgaged && (
+                        <span className="owner-mortgage-tag">Mortgaged</span>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="unowned-chip">Unowned</div>
+                  )}
+                </div>
+              )}
+
+              {/* Owner Property Management Buttons */}
+              {isSelectedOwnedByMe && isGameStarted && !isGameFinished && (
+                <div className="popover-owner-actions">
+                  {!selectedPropRecord?.isMortgaged ? (
+                    <button
+                      type="button"
+                      className="btn-popover-action btn-popover-mortgage"
+                      disabled={(selectedPropRecord?.houses ?? 0) > 0}
+                      onClick={() => onMortgageProperty(selectedSpace.id)}
+                    >
+                      <span>Mortgage</span>
+                      <span className="font-mono">+${Math.floor((selectedSpace.price ?? 0) / 2)}</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="btn-popover-action btn-popover-unmortgage"
+                      disabled={(myPlayerState?.cash ?? 0) < Math.ceil(((selectedSpace.price ?? 0) / 2) * 1.1)}
+                      onClick={() => onUnmortgageProperty(selectedSpace.id)}
+                    >
+                      <span>Unmortgage</span>
+                      <span className="font-mono">-${Math.ceil(((selectedSpace.price ?? 0) / 2) * 1.1)}</span>
+                    </button>
+                  )}
+
+                  {selectedSpace.group && (
+                    <div className="popover-build-row">
+                      <button
+                        type="button"
+                        className="btn-popover-action btn-popover-build"
+                        disabled={!canBuildOnSelected}
+                        onClick={() => onBuildHouse(selectedSpace.id)}
+                      >
+                        <span>Build {((selectedPropRecord?.houses ?? 0) === 4) ? 'Hotel' : 'House'}</span>
+                        <span className="font-mono">-${selectedSpace.houseCost ?? 0}</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-popover-action btn-popover-sell"
+                        disabled={!canSellOnSelected}
+                        onClick={() => onSellHouse(selectedSpace.id)}
+                      >
+                        <span>Sell {((selectedPropRecord?.houses ?? 0) === 5) ? 'Hotel' : 'House'}</span>
+                        <span className="font-mono">+${Math.floor((selectedSpace.houseCost ?? 0) / 2)}</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
       {/* Action Controls Bar Under the Board */}
@@ -1347,206 +1798,6 @@ export function Board({
           })}
         </div>
       </div>
-
-      {/* Property Inspection & Management Modal / Bottom Sheet */}
-      {selectedSpace && (
-        <div
-          className="modal-backdrop-scrim"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="prop-modal-title"
-          onClick={() => setSelectedSpaceId(null)}
-        >
-          <div className="dialog-card-surface prop-inspector-card" onClick={(e) => e.stopPropagation()}>
-            <div className="dialog-header-row">
-              <div className="prop-inspector-title-group">
-                {selectedOwner && (
-                  <span
-                    className="prop-group-dot"
-                    style={{
-                      backgroundColor: selectedOwner.color,
-                      boxShadow: `0 0 8px ${selectedOwner.color}88`,
-                    }}
-                    aria-hidden="true"
-                  />
-                )}
-                {selectedSpace.type === 'airport' && (
-                  <span className="prop-group-dot prop-group-dot-airport" aria-hidden="true">✈️</span>
-                )}
-                {selectedSpace.type === 'utility' && (
-                  <span className="prop-group-dot prop-group-dot-airport" aria-hidden="true">
-                    {selectedSpace.name.includes('Desi') ? '🐮' : selectedSpace.name.includes('Bhai') ? '🧱' : '🍗'}
-                  </span>
-                )}
-                <h2 id="prop-modal-title" className="dialog-title-text">
-                  {selectedSpace.type === 'airport'
-                    ? `${selectedSpace.name.replace(/\s*airport\s*/i, '').trim()} Airport`
-                    : selectedSpace.name}
-                </h2>
-                {isSpectator && (
-                  <span className="prop-spectator-chip">
-                    <EyeIcon size={13} style={{ marginRight: 4, verticalAlign: 'middle' }} />
-                    Spectating
-                  </span>
-                )}
-              </div>
-              <button
-                type="button"
-                className="dialog-close-btn"
-                onClick={() => setSelectedSpaceId(null)}
-                aria-label="Close property details"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="prop-detail-stats-grid">
-              <div className="prop-stat-box">
-                <span className="stat-label">Purchase Price</span>
-                <span className="stat-val font-mono">${selectedSpace.price ?? 0}</span>
-              </div>
-
-              <div className="prop-stat-box">
-                <span className="stat-label">Ownership</span>
-                <span className="stat-val" style={selectedOwner ? { color: selectedOwner.color } : {}}>
-                  {selectedOwner ? (
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
-                      <PlayerCharacter color={selectedOwner.color} size={16} />
-                      {selectedOwner.nickname} {selectedPropRecord?.isMortgaged ? '(Mortgaged)' : ''}
-                    </span>
-                  ) : (
-                    'Unowned'
-                  )}
-                </span>
-              </div>
-            </div>
-
-            {selectedSpace.rentTiers && (
-              <div className="prop-rent-schedule-card">
-                <div className="rent-schedule-header">Rent Schedule</div>
-                <div className="rent-tiers-grid">
-                  <div className="rent-tier-item">
-                    <span>Base Rent:</span> <strong className="font-mono">${selectedSpace.rentTiers[0]}</strong>
-                  </div>
-                  <div className="rent-tier-item">
-                    <span>With 1 House:</span> <strong className="font-mono">${selectedSpace.rentTiers[1]}</strong>
-                  </div>
-                  <div className="rent-tier-item">
-                    <span>With 2 Houses:</span> <strong className="font-mono">${selectedSpace.rentTiers[2]}</strong>
-                  </div>
-                  <div className="rent-tier-item">
-                    <span>With 3 Houses:</span> <strong className="font-mono">${selectedSpace.rentTiers[3]}</strong>
-                  </div>
-                  <div className="rent-tier-item">
-                    <span>With 4 Houses:</span> <strong className="font-mono">${selectedSpace.rentTiers[4]}</strong>
-                  </div>
-                  <div className="rent-tier-item rent-tier-hotel">
-                    <span>With Hotel:</span> <strong className="font-mono">${selectedSpace.rentTiers[5]}</strong>
-                  </div>
-                </div>
-                {selectedSpace.houseCost && (
-                  <div className="house-cost-note">
-                    Improvement Cost: ${selectedSpace.houseCost} per House / Hotel
-                  </div>
-                )}
-              </div>
-            )}
-
-            {selectedSpace.type === 'airport' && (
-              <div className="prop-rent-schedule-card">
-                <div className="rent-schedule-header">✈️ Airport Transit Rent</div>
-                <div className="rent-tiers-grid">
-                  <div className="rent-tier-item">
-                    <span>1 Airport Owned:</span> <strong className="font-mono">$25</strong>
-                  </div>
-                  <div className="rent-tier-item">
-                    <span>2 Airports Owned:</span> <strong className="font-mono">$50</strong>
-                  </div>
-                  <div className="rent-tier-item">
-                    <span>3 Airports Owned:</span> <strong className="font-mono">$100</strong>
-                  </div>
-                  <div className="rent-tier-item rent-tier-hotel">
-                    <span>All 4 Airports Owned:</span> <strong className="font-mono">$200</strong>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {selectedSpace.type === 'utility' && (
-              <div className="prop-rent-schedule-card">
-                <div className="rent-schedule-header">
-                  {selectedSpace.name.includes('Desi') ? '🐮' : selectedSpace.name.includes('Bhai') ? '🧱' : '🍗'} Utility Rent Multiplier
-                </div>
-                <div className="rent-tiers-grid">
-                  <div className="rent-tier-item">
-                    <span>1 Utility Owned:</span> <strong className="font-mono">4× Dice Roll</strong>
-                  </div>
-                  <div className="rent-tier-item rent-tier-hotel">
-                    <span>2+ Utilities Owned:</span> <strong className="font-mono">10× Dice Roll</strong>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Management actions for owner */}
-            {isSelectedOwnedByMe && isGameStarted && !isGameFinished && (
-              <div className="prop-management-actions-group">
-                {/* Mortgage / Unmortgage */}
-                {!selectedPropRecord?.isMortgaged ? (
-                  <button
-                    type="button"
-                    className="btn-secondary-action btn-manage-action"
-                    disabled={(selectedPropRecord?.houses ?? 0) > 0}
-                    onClick={() => onMortgageProperty(selectedSpace.id)}
-                  >
-                    <span>Mortgage Property</span>
-                    <span className="font-mono">+${Math.floor((selectedSpace.price ?? 0) / 2)}</span>
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    className="btn-secondary-action btn-manage-action"
-                    disabled={(myPlayerState?.cash ?? 0) < Math.ceil(((selectedSpace.price ?? 0) / 2) * 1.1)}
-                    onClick={() => onUnmortgageProperty(selectedSpace.id)}
-                  >
-                    <span>Unmortgage Property</span>
-                    <span className="font-mono">-${Math.ceil(((selectedSpace.price ?? 0) / 2) * 1.1)}</span>
-                  </button>
-                )}
-
-                {/* Build House */}
-                {selectedSpace.group && (
-                  <div className="build-sell-buttons-row">
-                    <button
-                      type="button"
-                      className="btn-primary-action btn-manage-action"
-                      disabled={!canBuildOnSelected}
-                      onClick={() => onBuildHouse(selectedSpace.id)}
-                    >
-                      <span>
-                        Build {((selectedPropRecord?.houses ?? 0) === 4) ? 'Hotel' : 'House'}
-                      </span>
-                      <span className="font-mono">-${selectedSpace.houseCost ?? 0}</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      className="btn-secondary-action btn-manage-action"
-                      disabled={!canSellOnSelected}
-                      onClick={() => onSellHouse(selectedSpace.id)}
-                    >
-                      <span>
-                        Sell {((selectedPropRecord?.houses ?? 0) === 5) ? 'Hotel' : 'House'}
-                      </span>
-                      <span className="font-mono">+${Math.floor((selectedSpace.houseCost ?? 0) / 2)}</span>
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
 
       {/* Trade Proposal Modal */}
       {isTradeModalOpen && (

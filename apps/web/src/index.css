@@ -2599,114 +2599,469 @@ button:disabled {
   flex: 1;
 }
 
-/* Property Inspector Modal */
-.prop-inspector-card {
-  max-width: 380px;
+/* ==========================================================================
+   Property Inspection & Details Popover Tooltip (Reference UI)
+   ========================================================================== */
+
+.popover-backdrop-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 60;
+  background: rgba(8, 11, 24, 0.45);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  animation: popoverFadeIn 0.16s ease-out;
 }
 
-.prop-inspector-title-group {
+@keyframes popoverFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.prop-popover-card {
+  position: absolute;
+  z-index: 70;
+  width: min(272px, 86%);
+  max-height: min(420px, 82%);
+  background: linear-gradient(180deg, #1c2342 0%, #13172e 100%);
+  border: 1px solid rgba(147, 197, 253, 0.28);
+  border-radius: 14px;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.65), 0 0 20px rgba(56, 189, 248, 0.14);
+  color: #ffffff;
   display: flex;
-  align-items: center;
-  gap: 0.5rem;
+  flex-direction: column;
+  box-sizing: border-box;
+  overflow: visible; /* Allows directional notch to protrude cleanly towards clicked tile */
+  user-select: none;
+  animation: popoverFadeIn 0.16s ease-out;
 }
 
-.prop-group-dot {
-  width: 14px;
-  height: 14px;
-  border-radius: 3px;
+.popover-card-scrollable {
+  display: flex;
+  flex-direction: column;
+  padding: 12px 14px 10px 14px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  max-height: 100%;
+  border-radius: 14px;
 }
 
-.prop-group-dot-airport {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.9rem;
+.popover-card-scrollable::-webkit-scrollbar {
+  width: 4px;
+}
+.popover-card-scrollable::-webkit-scrollbar-thumb {
+  background: rgba(147, 197, 253, 0.25);
+  border-radius: 2px;
+}
+.popover-card-scrollable::-webkit-scrollbar-track {
   background: transparent;
 }
 
-.prop-detail-stats-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.5rem;
-  margin-bottom: 0.75rem;
+/* Directional Notches */
+.popover-notch {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  z-index: 75;
+  pointer-events: none;
 }
 
-.prop-stat-box {
-  background: var(--bg-surface-2);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  padding: 0.5rem 0.75rem;
+.popover-notch-up {
+  background: #1c2342;
+  border-top: 1px solid rgba(147, 197, 253, 0.35);
+  border-left: 1px solid rgba(147, 197, 253, 0.35);
+}
+
+.popover-notch-down {
+  background: #13172e;
+  border-bottom: 1px solid rgba(147, 197, 253, 0.35);
+  border-right: 1px solid rgba(147, 197, 253, 0.35);
+}
+
+.popover-notch-right {
+  background: #181e3a;
+  border-top: 1px solid rgba(147, 197, 253, 0.35);
+  border-right: 1px solid rgba(147, 197, 253, 0.35);
+}
+
+.popover-notch-left {
+  background: #181e3a;
+  border-bottom: 1px solid rgba(147, 197, 253, 0.35);
+  border-left: 1px solid rgba(147, 197, 253, 0.35);
+}
+
+/* Close button */
+.popover-close-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 50%;
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  z-index: 5;
+  padding: 0;
+  line-height: 1;
+}
+
+.popover-close-btn:hover {
+  background: rgba(255, 255, 255, 0.22);
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.35);
+  transform: scale(1.08);
+}
+
+/* Header & Glowing Icon */
+.popover-header-center {
   display: flex;
   flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 8px;
+  padding: 0 16px;
 }
 
-.stat-label {
-  font-size: 0.7rem;
-  color: var(--text-muted);
+.popover-cyan-glow-icon {
+  color: #38bdf8;
+  filter: drop-shadow(0 0 10px rgba(56, 189, 248, 0.85));
+  margin-bottom: 4px;
 }
 
-.stat-val {
-  font-size: 0.85rem;
+.popover-group-strip {
+  width: 34px;
+  height: 4px;
+  border-radius: 2px;
+  margin-bottom: 6px;
+}
+
+.popover-title {
+  margin: 0;
+  font-size: 1.15rem;
   font-weight: 700;
   color: #ffffff;
-  margin-top: 2px;
+  text-align: center;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
 }
 
-.prop-rent-schedule-card {
-  background: var(--bg-surface-2);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  padding: 0.75rem;
-  margin-bottom: 0.75rem;
+/* "when" / "get" Table Layout */
+.popover-table {
+  width: 100%;
+  margin-top: 4px;
 }
 
-.rent-schedule-header {
-  font-size: 0.8rem;
-  font-weight: 700;
-  color: var(--primary-purple);
-  margin-bottom: 0.4rem;
-}
-
-.rent-tiers-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.35rem 0.75rem;
-  font-size: 0.75rem;
-}
-
-.rent-tier-item {
+.popover-table-header {
   display: flex;
   justify-content: space-between;
-  color: var(--text-secondary);
+  align-items: center;
+  padding-bottom: 3px;
+  margin-bottom: 5px;
 }
 
-.rent-tier-hotel {
-  color: #f87171;
+.popover-col-header {
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: #93c5fd;
+  border-bottom: 1.5px solid rgba(147, 197, 253, 0.4);
+  padding-bottom: 1px;
 }
 
-.house-cost-note {
-  font-size: 0.7rem;
-  color: var(--text-muted);
-  border-top: 1px solid var(--border-subtle);
-  padding-top: 0.4rem;
-  margin-top: 0.5rem;
+.popover-col-header.col-when {
+  text-align: left;
 }
 
-.prop-management-actions-group {
+.popover-col-header.col-get {
+  text-align: right;
+}
+
+.popover-table-body {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 3px;
 }
 
-.btn-manage-action {
-  width: 100%;
+.popover-table-row {
   display: flex;
   justify-content: space-between;
+  align-items: center;
+  font-size: 0.82rem;
+  color: #e2e8f0;
+  padding: 2px 4px;
+  border-radius: 4px;
+  transition: background-color 0.15s ease;
 }
 
-.build-sell-buttons-row {
+.popover-table-row.row-active {
+  background: rgba(56, 189, 248, 0.16);
+  color: #ffffff;
+  font-weight: 600;
+  box-shadow: inset 2px 0 0 #38bdf8;
+}
+
+.popover-table-row .row-desc {
+  color: #cbd5e1;
+}
+
+.popover-table-row.row-active .row-desc {
+  color: #ffffff;
+}
+
+.popover-table-row .row-value {
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.popover-table-row .row-currency {
+  color: #94a3b8;
+  font-weight: 400;
+  margin-right: 2px;
+}
+
+/* Utility Rules */
+.popover-utility-rules {
   display: flex;
-  gap: 0.5rem;
+  flex-direction: column;
+  gap: 8px;
+  margin: 6px 0 8px 0;
+  text-align: center;
+}
+
+.utility-rule-pair {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.rule-cond {
+  font-size: 0.78rem;
+  color: #cbd5e1;
+}
+
+.rule-get {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.rule-dice-icon {
+  font-size: 0.95rem;
+}
+
+/* Special Space Descriptions */
+.popover-special-desc {
+  font-size: 0.8rem;
+  color: #cbd5e1;
+  text-align: center;
+  margin: 8px 0;
+  line-height: 1.35;
+}
+
+/* Divider Line */
+.popover-divider {
+  width: 100%;
+  height: 1px;
+  background: rgba(147, 197, 253, 0.18);
+  margin: 9px 0 8px 0;
+}
+
+/* Footers */
+.popover-footer-single {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+}
+
+.popover-footer-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  align-items: center;
+  text-align: center;
+}
+
+.footer-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+}
+
+.footer-label {
+  font-size: 0.72rem;
+  color: #94a3b8;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 16px;
+}
+
+.footer-label svg {
+  color: #93c5fd;
+}
+
+.footer-price {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+/* Ownership Row & Tags */
+.popover-ownership-row {
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px dashed rgba(147, 197, 253, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.owner-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  padding: 2px 8px;
+  border-radius: 9999px;
+  font-size: 0.72rem;
+}
+
+.owner-name {
+  font-weight: 600;
+}
+
+.owner-mortgage-tag {
+  background: rgba(239, 68, 68, 0.2);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  font-size: 0.65rem;
+  padding: 0 4px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+
+.unowned-chip {
+  font-size: 0.72rem;
+  color: #94a3b8;
+  background: rgba(255, 255, 255, 0.04);
+  padding: 2px 8px;
+  border-radius: 9999px;
+  border: 1px dashed rgba(255, 255, 255, 0.12);
+}
+
+/* Owner Management Actions */
+.popover-owner-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 8px;
+}
+
+.popover-build-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.btn-popover-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 5px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border: none;
+}
+
+.btn-popover-action:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn-popover-mortgage,
+.btn-popover-unmortgage {
+  background: rgba(255, 255, 255, 0.08);
+  color: #e2e8f0;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+}
+
+.btn-popover-mortgage:hover:not(:disabled),
+.btn-popover-unmortgage:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.15);
+  color: #ffffff;
+}
+
+.btn-popover-build {
+  background: #3b82f6;
+  color: #ffffff;
+  box-shadow: 0 2px 6px rgba(59, 130, 246, 0.35);
+}
+
+.btn-popover-build:hover:not(:disabled) {
+  background: #2563eb;
+}
+
+.btn-popover-sell {
+  background: rgba(255, 255, 255, 0.08);
+  color: #e2e8f0;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+}
+
+.btn-popover-sell:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.15);
+  color: #ffffff;
+}
+
+@media (max-width: 640px) {
+  .prop-popover-card {
+    width: min(238px, 86%);
+    max-height: min(330px, 82%);
+    font-size: 0.78rem;
+  }
+  .popover-card-scrollable {
+    padding: 9px 11px 9px 11px;
+  }
+  .popover-title {
+    font-size: 0.95rem;
+  }
+  .popover-table-row {
+    font-size: 0.72rem;
+    padding: 1px 2px;
+  }
+  .popover-cyan-glow-icon {
+    width: 26px;
+    height: 26px;
+  }
+  .footer-price {
+    font-size: 0.85rem;
+  }
+  .btn-popover-action {
+    font-size: 0.68rem;
+    padding: 4px 5px;
+  }
 }
 
 /* Trade Modal Card */
