@@ -395,6 +395,8 @@ export function Board({
   const prevActivePlayerRef = useRef<string | undefined>(activePlayerId);
   const movementIntervalsRef = useRef<Record<string, NodeJS.Timeout>>({});
   const movementTimeoutsRef = useRef<Record<string, NodeJS.Timeout>>({});
+  const movingPlayerIdsRef = useRef<Set<string>>(new Set());
+  const movementWatchdogRef = useRef<NodeJS.Timeout | null>(null);
   const diceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isInitialMountRef = useRef<boolean>(true);
   const alertTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -492,6 +494,11 @@ export function Board({
       setDisplayedPositions(initialMap);
       setIsTokenMoving(false);
       setIsDiceAnimating(false);
+      movingPlayerIdsRef.current.clear();
+      if (movementWatchdogRef.current) {
+        clearTimeout(movementWatchdogRef.current);
+        movementWatchdogRef.current = null;
+      }
       isInitialMountRef.current = false;
       prevActivePlayerRef.current = activePlayerId;
       if (gameState?.lastDiceRoll) {
@@ -500,9 +507,36 @@ export function Board({
       return;
     }
 
+    // 2. Turn rotated to a different player:
+    // Immediately terminate any lingering animations/timers from the prior player's turn and snap tokens
+    if (prevActivePlayerRef.current && prevActivePlayerRef.current !== activePlayerId) {
+      Object.values(movementIntervalsRef.current).forEach(clearInterval);
+      movementIntervalsRef.current = {};
+      Object.values(movementTimeoutsRef.current).forEach(clearTimeout);
+      movementTimeoutsRef.current = {};
+      if (diceTimeoutRef.current) {
+        clearTimeout(diceTimeoutRef.current);
+        diceTimeoutRef.current = null;
+      }
+      if (movementWatchdogRef.current) {
+        clearTimeout(movementWatchdogRef.current);
+        movementWatchdogRef.current = null;
+      }
+      movingPlayerIdsRef.current.clear();
+      setIsTokenMoving(false);
+      setIsDiceAnimating(false);
+
+      roomSnapshot.players.forEach((p) => {
+        const targetPos = gameState?.players[p.id]?.position ?? 0;
+        displayedPositionsRef.current[p.id] = targetPos;
+      });
+      setDisplayedPositions({ ...displayedPositionsRef.current });
+    }
+    prevActivePlayerRef.current = activePlayerId;
+
     const reduced = prefersReducedMotion();
 
-    // 2. Animate dice when a new authoritative dice roll arrives
+    // 3. Animate dice when a new authoritative dice roll arrives
     let hasNewRoll = false;
     if (gameState?.lastDiceRoll) {
       const rollKey = `${gameState.lastDiceRoll.die1}_${gameState.lastDiceRoll.die2}_${gameState.lastDiceRoll.total}_${roomSnapshot.sequenceNumber}`;
@@ -520,7 +554,42 @@ export function Board({
       }
     }
 
-    // 3. Tile-by-tile token stepping for each seated player
+    // Helper: Arm watchdog to ensure animations never hang indefinitely
+    const armMovementWatchdog = () => {
+      if (movementWatchdogRef.current) clearTimeout(movementWatchdogRef.current);
+      movementWatchdogRef.current = setTimeout(() => {
+        Object.values(movementIntervalsRef.current).forEach(clearInterval);
+        movementIntervalsRef.current = {};
+        Object.values(movementTimeoutsRef.current).forEach(clearTimeout);
+        movementTimeoutsRef.current = {};
+        movingPlayerIdsRef.current.clear();
+        setIsTokenMoving(false);
+        setIsDiceAnimating(false);
+        const snapMap: Record<string, number> = {};
+        roomSnapshot.players.forEach((p) => {
+          snapMap[p.id] = gameState?.players[p.id]?.position ?? 0;
+        });
+        displayedPositionsRef.current = snapMap;
+        setDisplayedPositions(snapMap);
+      }, 2000);
+    };
+
+    // 4. Tile-by-tile token stepping for each seated player
+    const playersNeedingAnimation = roomSnapshot.players.filter((p) => {
+      const targetPos = gameState?.players[p.id]?.position ?? 0;
+      const currentPos = displayedPositionsRef.current[p.id] ?? targetPos;
+      return targetPos !== currentPos;
+    });
+
+    if (playersNeedingAnimation.length === 0) {
+      movingPlayerIdsRef.current.clear();
+      setIsTokenMoving(false);
+      if (movementWatchdogRef.current) {
+        clearTimeout(movementWatchdogRef.current);
+        movementWatchdogRef.current = null;
+      }
+    }
+
     roomSnapshot.players.forEach((p) => {
       const targetPos = gameState?.players[p.id]?.position ?? 0;
       const currentPos = displayedPositionsRef.current[p.id] ?? targetPos;
@@ -540,21 +609,24 @@ export function Board({
       if (reduced) {
         // Immediate jump if reduced motion is requested
         updatePosition(p.id, targetPos);
-        setIsTokenMoving(false);
+        movingPlayerIdsRef.current.delete(p.id);
+        if (movingPlayerIdsRef.current.size === 0) setIsTokenMoving(false);
         return;
       }
 
       const path = calculateStepPath(currentPos, targetPos);
       if (path.length === 0) {
         updatePosition(p.id, targetPos);
-        setIsTokenMoving(false);
+        movingPlayerIdsRef.current.delete(p.id);
+        if (movingPlayerIdsRef.current.size === 0) setIsTokenMoving(false);
         return;
       }
 
       // If direct transfer (e.g. Go to Prison direct jump)
       if (path.length === 1) {
         updatePosition(p.id, targetPos);
-        setIsTokenMoving(false);
+        movingPlayerIdsRef.current.delete(p.id);
+        if (movingPlayerIdsRef.current.size === 0) setIsTokenMoving(false);
         if (targetPos === 12) {
           soundManager.playGoToPrison();
         }
@@ -562,7 +634,10 @@ export function Board({
       }
 
       // Step along the path tile-by-tile
+      movingPlayerIdsRef.current.add(p.id);
       setIsTokenMoving(true);
+      armMovementWatchdog();
+
       const startDelay = hasNewRoll ? 300 : 0; // Brief delay while dice tumble
 
       movementTimeoutsRef.current[p.id] = setTimeout(() => {
@@ -577,7 +652,14 @@ export function Board({
             clearInterval(stepInterval);
             delete movementIntervalsRef.current[p.id];
             updatePosition(p.id, targetPos);
-            setIsTokenMoving(false);
+            movingPlayerIdsRef.current.delete(p.id);
+            if (movingPlayerIdsRef.current.size === 0) {
+              setIsTokenMoving(false);
+              if (movementWatchdogRef.current) {
+                clearTimeout(movementWatchdogRef.current);
+                movementWatchdogRef.current = null;
+              }
+            }
             if (targetPos === 12 && gameState?.players[p.id]?.inPrison) {
               soundManager.playGoToPrison();
             }
@@ -597,8 +679,48 @@ export function Board({
         clearTimeout(diceTimeoutRef.current);
         diceTimeoutRef.current = null;
       }
+      if (movementWatchdogRef.current) {
+        clearTimeout(movementWatchdogRef.current);
+        movementWatchdogRef.current = null;
+      }
+      movingPlayerIdsRef.current.clear();
+      setIsTokenMoving(false);
+      setIsDiceAnimating(false);
     };
-  }, [roomSnapshot.sequenceNumber, gameState?.lastDiceRoll, gameState?.players, isGameStarted]);
+  }, [roomSnapshot.sequenceNumber, gameState?.lastDiceRoll, gameState?.players, isGameStarted, activePlayerId]);
+
+  // Tab Visibility Auto-Recovery: Snaps tokens and clears stuck animations when returning to tab
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        Object.values(movementIntervalsRef.current).forEach(clearInterval);
+        movementIntervalsRef.current = {};
+        Object.values(movementTimeoutsRef.current).forEach(clearTimeout);
+        movementTimeoutsRef.current = {};
+        if (diceTimeoutRef.current) {
+          clearTimeout(diceTimeoutRef.current);
+          diceTimeoutRef.current = null;
+        }
+        if (movementWatchdogRef.current) {
+          clearTimeout(movementWatchdogRef.current);
+          movementWatchdogRef.current = null;
+        }
+        movingPlayerIdsRef.current.clear();
+        setIsTokenMoving(false);
+        setIsDiceAnimating(false);
+
+        const snapMap: Record<string, number> = {};
+        roomSnapshot.players.forEach((p) => {
+          snapMap[p.id] = gameState?.players[p.id]?.position ?? 0;
+        });
+        displayedPositionsRef.current = snapMap;
+        setDisplayedPositions(snapMap);
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [gameState?.players, roomSnapshot.players]);
 
   // Audio & Feedback triggers for notable game events
   useEffect(() => {
@@ -1231,42 +1353,48 @@ export function Board({
                 <span>View Results</span>
               </button>
             ) : isMyTurn ? (
-              isTokenMoving || isDiceAnimating ? (
+              turnPhase === 'need_roll' ? (
+                isDiceAnimating ? (
+                  <div className="courtyard-player-playing-status" role="status" aria-live="polite">
+                    <span className="playing-status-text">Rolling dice...</span>
+                  </div>
+                ) : (
+                  <>
+                    {myPlayerState?.inPrison && (
+                      <button
+                        id="btn-pay-fine"
+                        type="button"
+                        className="btn-secondary-action btn-pay-prison-fine"
+                        onClick={onPayPrisonFine}
+                        disabled={(myPlayerState?.cash ?? 0) < 50 || isSubmittingAction}
+                      >
+                        <UnlockIcon size={14} style={{ marginRight: 6 }} />
+                        <span>Pay $50 & Exit</span>
+                      </button>
+                    )}
+                    <button
+                      id="btn-roll-dice"
+                      type="button"
+                      className="btn-primary-action btn-roll-prominent"
+                      onClick={onRollDice}
+                      disabled={isRolling || isSubmittingAction}
+                    >
+                      <span>
+                        {isRolling
+                          ? 'Rolling...'
+                          : myPlayerState?.inPrison
+                          ? 'Roll for Doubles'
+                          : 'Roll the dice'}
+                      </span>
+                    </button>
+                  </>
+                )
+              ) : isTokenMoving || isDiceAnimating ? (
                 <div className="courtyard-player-playing-status" role="status" aria-live="polite">
                   <span className="playing-status-text">
                     {isDiceAnimating ? 'Rolling dice...' : 'Advancing to space...'}
                   </span>
                 </div>
-              ) : turnPhase === 'need_roll' ? (
-                <>
-                  {myPlayerState?.inPrison && (
-                    <button
-                      id="btn-pay-fine"
-                      type="button"
-                      className="btn-secondary-action btn-pay-prison-fine"
-                      onClick={onPayPrisonFine}
-                      disabled={(myPlayerState?.cash ?? 0) < 50 || isSubmittingAction}
-                    >
-                      <UnlockIcon size={14} style={{ marginRight: 6 }} />
-                      <span>Pay $50 & Exit</span>
-                    </button>
-                  )}
-                  <button
-                    id="btn-roll-dice"
-                    type="button"
-                    className="btn-primary-action btn-roll-prominent"
-                    onClick={onRollDice}
-                    disabled={isRolling || isSubmittingAction}
-                  >
-                    <span>
-                      {isRolling
-                        ? 'Rolling...'
-                        : myPlayerState?.inPrison
-                        ? 'Roll for Doubles'
-                        : 'Roll the dice'}
-                    </span>
-                  </button>
-                </>
               ) : turnPhase === 'action_pending' && currentLandingSpace ? (
                 <div className="courtyard-action-buttons-row">
                   <button

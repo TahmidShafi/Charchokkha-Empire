@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { calculateStepPath, prefersReducedMotion } from '../src/utils/tokenMovement.js';
 import { getBoardSpace, TOTAL_SPACES } from '@charchokkha/game-engine';
+import { Board } from '../src/components/Board.js';
+import type { RoomSnapshot } from '@charchokkha/shared';
 
 describe('Dice Roll and Token Movement Lifecycle Suite', () => {
   it('calculates full stepwise trajectory for normal dice roll', () => {
@@ -72,5 +76,88 @@ describe('Dice Roll and Token Movement Lifecycle Suite', () => {
     expect(css).toMatch(/\.tactile-dice-cube\.val-4\s*\{[^}]*rotateZ\(90deg\)/);
     expect(css).toMatch(/\.tactile-dice-cube\.val-5\s*\{[^}]*rotateX\(-90deg\)/);
     expect(css).toMatch(/\.tactile-dice-cube\.val-6\s*\{[^}]*rotateX\(180deg\)/);
+  });
+
+  it('guarantees Roll the dice button is rendered and never blocked by Advancing to space in need_roll phase', () => {
+    // Scenario matching user report: Bot Robo Tycoon ended turn, turn transferred to user (p1)
+    const snapshot: RoomSnapshot = {
+      code: 'TESTROOM',
+      hostId: 'p1',
+      state: 'in_progress',
+      sequenceNumber: 15,
+      createdAt: Date.now(),
+      settings: {
+        maxPlayers: 2,
+        isPrivate: false,
+        allowBots: true,
+        startingCash: 1500,
+        doubleRent: true,
+        vacationCash: true,
+        auction: true,
+        noRentInPrison: false,
+        mortgage: true,
+        evenBuild: true,
+      },
+      players: [
+        { id: 'p1', nickname: 'Alice', avatar: '👑', color: '#C4E64A', isHost: true, connected: true, seatIndex: 0 },
+        { id: 'bot_1', nickname: 'Robo Tycoon', avatar: '🤖', color: '#FB923C', isHost: false, connected: true, seatIndex: 1, isBot: true },
+      ],
+      gameState: {
+        phase: 'in_progress',
+        turnOrder: ['bot_1', 'p1'],
+        currentTurnIndex: 1,
+        activePlayerId: 'p1',
+        turnPhase: 'need_roll',
+        lastDiceRoll: null,
+        startingSalary: 200,
+        vacationPot: 0,
+        players: {
+          p1: { id: 'p1', position: 0, cash: 1500, inPrison: false, prisonTurns: 0, isBankrupt: false },
+          bot_1: { id: 'bot_1', position: 16, cash: 1340, inPrison: false, prisonTurns: 0, isBankrupt: false },
+        },
+        properties: {
+          16: { ownerId: 'bot_1', houses: 0, isMortgaged: false },
+        },
+        rules: {
+          doubleRent: true,
+          vacationCash: true,
+          auction: true,
+          noRentInPrison: false,
+          mortgage: true,
+          evenBuild: true,
+        },
+        lastActionMessage: 'Robo Tycoon ended turn. Active player is now p1.',
+      },
+    };
+
+    const html = renderToStaticMarkup(
+      React.createElement(Board, {
+        roomCode: 'TESTROOM',
+        roomSnapshot: snapshot,
+        currentSessionId: 'p1',
+        isHost: true,
+        isRolling: false,
+        onStartGame: () => {},
+        onRollDice: () => {},
+        onBuyProperty: () => {},
+        onDeclineProperty: () => {},
+        onAuctionBid: () => {},
+        onAuctionPass: () => {},
+        onPayPrisonFine: () => {},
+        onMortgageProperty: () => {},
+        onUnmortgageProperty: () => {},
+        onBuildHouse: () => {},
+        onSellHouse: () => {},
+        onCreateTrade: () => {},
+        onAcceptTrade: () => {},
+        onRejectTrade: () => {},
+        onDeclareBankruptcy: () => {},
+        onEndTurn: () => {},
+      })
+    );
+
+    // The user MUST see the roll button, and MUST NOT be stuck on 'Advancing to space...'
+    expect(html).toContain('Roll the dice');
+    expect(html).not.toContain('Advancing to space...');
   });
 });

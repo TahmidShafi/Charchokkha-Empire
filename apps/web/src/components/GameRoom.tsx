@@ -64,7 +64,7 @@ export function GameRoom({
     pendingRequestsRef.current.delete(actionKey);
   };
 
-  // Reset in-flight flags on socket disconnect so buttons do not stay stuck
+  // Reset in-flight flags on socket disconnect or sequence update so buttons do not stay stuck
   useEffect(() => {
     if (!socket) return;
     const handleDisconnect = () => {
@@ -76,6 +76,10 @@ export function GameRoom({
       socket.off('disconnect', handleDisconnect);
     };
   }, [socket]);
+
+  useEffect(() => {
+    setIsSubmittingAction(false);
+  }, [roomSnapshot.sequenceNumber]);
 
   const handleToggleMute = () => {
     const next = soundManager.toggleMuted();
@@ -280,10 +284,17 @@ export function GameRoom({
     const requestId = getOrCreateRequestId(actionKey);
     setIsRolling(true);
     setIsSubmittingAction(true);
+
+    const safetyTimer = setTimeout(() => {
+      setIsSubmittingAction(false);
+      setIsRolling(false);
+    }, 3000);
+
     socket.emit(
       SOCKET_EVENTS.GAME_ROLL_DICE,
       { roomCode, requestId },
       (ack: SocketAck<RoomSnapshot>) => {
+        clearTimeout(safetyTimer);
         setIsSubmittingAction(false);
         setTimeout(() => {
           setIsRolling(false);
