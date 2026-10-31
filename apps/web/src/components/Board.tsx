@@ -4,6 +4,8 @@ import {
   getSpaceBadge,
   formatTileDisplayName,
   PROPERTY_GROUP_COLORS,
+  getSpacePropertyGroup,
+  getSpaceGroupColor,
   type BoardSpace,
 } from '../boardData';
 import { getBoardSpace, getGroupSpaces, hasColorMonopoly } from '@charchokkha/game-engine';
@@ -768,6 +770,7 @@ export function Board({
   }
 
   const popoverPlacement = selectedSpace ? getPopoverPlacement(selectedSpace.id) : null;
+  const selectedPropGroup = selectedSpace ? getSpacePropertyGroup(selectedSpace.id) : undefined;
   const ownedAirportsCount = selectedPropRecord?.ownerId
     ? [6, 18, 30, 42].filter((id) => getPropertyInfo(id)?.ownerId === selectedPropRecord.ownerId).length
     : 0;
@@ -848,6 +851,7 @@ export function Board({
     const inwardPositionClass = `inward-edge-${coords.edge}`;
     const isAirport = space.type === 'airport';
     const tileDisplayName = formatTileDisplayName(space);
+    const groupColor = getSpaceGroupColor(space.id);
 
     const tileStyle: React.CSSProperties = {
       ...(isInsideTrack
@@ -855,8 +859,12 @@ export function Board({
         : { gridRow: coords.gridRow, gridColumn: coords.gridColumn }),
       ...(ownerPlayer
         ? {
-            borderColor: `${ownerPlayer.color}66`,
+            borderColor: `${ownerPlayer.color}b3`,
             boxShadow: `inset 0 0 6px ${ownerPlayer.color}26`,
+          }
+        : groupColor
+        ? {
+            borderColor: `${groupColor}33`,
           }
         : {}),
     };
@@ -872,16 +880,32 @@ export function Board({
         aria-label={`${space.name}, Price: ${space.price ?? 0}`}
         onClick={() => setSelectedSpaceId(space.id)}
       >
-        {/* Ownership Strip: renders ONLY when the property is owned, matching the owner's player color */}
-        {ownerPlayer && (
+        {/* Permanent Property Group Color Strip (3.5px along inward edge) */}
+        {groupColor && (
           <div
-            className="tile-color-strip tile-ownership-strip"
+            className="tile-color-strip tile-group-color-strip"
             style={{
-              backgroundColor: ownerPlayer.color,
-              boxShadow: `0 0 8px ${ownerPlayer.color}88`,
+              backgroundColor: groupColor,
+              boxShadow: `0 0 6px ${groupColor}55`,
             }}
             aria-hidden="true"
           />
+        )}
+
+        {/* Separate Owner Indicator: Displays player's ownership color */}
+        {ownerPlayer && (
+          <div
+            className="tile-owner-indicator tile-ownership-strip"
+            aria-hidden="true"
+          >
+            <span
+              className="tile-owner-dot"
+              style={{
+                backgroundColor: ownerPlayer.color,
+                boxShadow: `0 0 5px ${ownerPlayer.color}`,
+              }}
+            />
+          </div>
         )}
 
         {/* Building indicators (Houses / Hotel) */}
@@ -1433,15 +1457,46 @@ export function Board({
                     <path d="M17.5 24.5c0 1.38-1.12 2.5-2.5 2.5s-2.5-1.12-2.5-2.5c0-1.2 1.8-3.5 2.5-4.2.7.7 2.5 3 2.5 4.2z" fill="#38bdf8" />
                   </svg>
                 )}
-                {selectedSpace.group && PROPERTY_GROUP_COLORS[selectedSpace.group] && (
-                  <div
-                    className="popover-group-strip"
-                    style={{
-                      backgroundColor: PROPERTY_GROUP_COLORS[selectedSpace.group],
-                      boxShadow: `0 0 10px ${PROPERTY_GROUP_COLORS[selectedSpace.group]}99`,
-                    }}
-                    aria-hidden="true"
-                  />
+                {selectedPropGroup ? (
+                  <>
+                    <div
+                      className="popover-group-strip"
+                      style={{
+                        backgroundColor: selectedPropGroup.color,
+                        boxShadow: `0 0 10px ${selectedPropGroup.color}99`,
+                      }}
+                      aria-hidden="true"
+                    />
+                    <div
+                      className="popover-group-badge-wrapper"
+                      style={{
+                        backgroundColor: `${selectedPropGroup.color}15`,
+                        borderColor: `${selectedPropGroup.color}44`,
+                      }}
+                    >
+                      <span
+                        className="popover-group-color-dot"
+                        style={{
+                          backgroundColor: selectedPropGroup.color,
+                          boxShadow: `0 0 6px ${selectedPropGroup.color}`,
+                        }}
+                      />
+                      <span className="popover-group-badge-label" style={{ color: selectedPropGroup.color }}>
+                        {selectedPropGroup.name}: {selectedPropGroup.colorName} ({selectedPropGroup.color})
+                      </span>
+                    </div>
+                  </>
+                ) : (
+                  selectedSpace.group && PROPERTY_GROUP_COLORS[selectedSpace.group] && (
+                    <div
+                      className="popover-group-strip"
+                      style={{
+                        backgroundColor: PROPERTY_GROUP_COLORS[selectedSpace.group],
+                        boxShadow: `0 0 10px ${PROPERTY_GROUP_COLORS[selectedSpace.group]}99`,
+                      }}
+                      aria-hidden="true"
+                    />
+                  )
                 )}
                 <h2 id="prop-popover-title" className="popover-title">
                   {selectedSpace.type === 'airport'
@@ -1536,6 +1591,66 @@ export function Board({
                       <span className="row-desc">with a hotel</span>
                       <span className="row-value font-mono"><span className="row-currency">$</span> {selectedSpace.rentTiers[5]}</span>
                     </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Group Collection Interface */}
+              {selectedPropGroup && (
+                <div className="popover-group-collection-box">
+                  <div className="popover-group-collection-header">
+                    <span className="popover-group-collection-title">
+                      <span
+                        className="group-color-sample-dot"
+                        style={{ backgroundColor: selectedPropGroup.color }}
+                      />
+                      {selectedPropGroup.colorName} Collection Set
+                    </span>
+                    <span className="popover-group-hex-tag font-mono">{selectedPropGroup.color}</span>
+                  </div>
+                  <div className="popover-group-properties-list">
+                    {selectedPropGroup.propertyIds.map((propId) => {
+                      const propSpace = getBoardSpace(propId);
+                      const propInfo = getPropertyInfo(propId);
+                      const owner = propInfo?.ownerId
+                        ? roomSnapshot.players.find((p: Player) => p.id === propInfo.ownerId)
+                        : undefined;
+                      const isCurrent = propId === selectedSpace.id;
+
+                      return (
+                        <div
+                          key={propId}
+                          className={`popover-group-prop-item ${isCurrent ? 'item-current' : ''}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedSpaceId(propId);
+                          }}
+                          role="button"
+                          tabIndex={0}
+                          title={`Click to view ${propSpace.name}`}
+                        >
+                          <div className="popover-group-prop-left">
+                            <span
+                              className="prop-status-dot"
+                              style={{ backgroundColor: owner?.color ?? '#64748b' }}
+                            />
+                            <span className="popover-group-prop-name">{propSpace.name}</span>
+                          </div>
+                          <div className="popover-group-prop-right">
+                            {owner ? (
+                              <span
+                                className="popover-group-owner-tag"
+                                style={{ color: owner.color }}
+                              >
+                                {owner.id === currentSessionId ? 'You' : owner.nickname}
+                              </span>
+                            ) : (
+                              <span className="popover-group-unowned-tag">Unowned</span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -1868,6 +1983,8 @@ export function Board({
                       ) : (
                         BOARD_SPACES.filter((s) => getPropertyInfo(s.id)?.ownerId === currentSessionId).map((s) => {
                           const isSelected = tradeOfferedProps.includes(s.id);
+                          const propGroup = getSpacePropertyGroup(s.id);
+                          const groupColor = propGroup?.color;
                           return (
                             <button
                               key={s.id}
@@ -1881,7 +1998,14 @@ export function Board({
                                 );
                               }}
                             >
-                              {s.name}
+                              {groupColor && (
+                                <span
+                                  className="trade-prop-group-dot"
+                                  style={{ backgroundColor: groupColor }}
+                                  aria-hidden="true"
+                                />
+                              )}
+                              <span>{s.name}</span>
                             </button>
                           );
                         })
@@ -1914,6 +2038,8 @@ export function Board({
                       ) : (
                         BOARD_SPACES.filter((s) => getPropertyInfo(s.id)?.ownerId === tradeTargetPlayerId).map((s) => {
                           const isSelected = tradeRequestedProps.includes(s.id);
+                          const propGroup = getSpacePropertyGroup(s.id);
+                          const groupColor = propGroup?.color;
                           return (
                             <button
                               key={s.id}
@@ -1927,7 +2053,14 @@ export function Board({
                                 );
                               }}
                             >
-                              {s.name}
+                              {groupColor && (
+                                <span
+                                  className="trade-prop-group-dot"
+                                  style={{ backgroundColor: groupColor }}
+                                  aria-hidden="true"
+                                />
+                              )}
+                              <span>{s.name}</span>
                             </button>
                           );
                         })

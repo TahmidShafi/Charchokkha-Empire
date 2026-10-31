@@ -4,7 +4,7 @@ import {
   calculateStandings,
   getBoardSpace,
 } from '@charchokkha/game-engine';
-import { PROPERTY_GROUP_COLORS, getSpaceBadge } from '../boardData';
+import { PROPERTY_GROUP_COLORS, getSpaceBadge, getSpaceGroupColor } from '../boardData';
 import { PlayerCharacter } from './PlayerCharacter';
 import { TrophyIcon, CrownIcon, RefreshIcon, EyeIcon, LogOutIcon } from './Icons';
 
@@ -319,9 +319,9 @@ export const PostMatchResults: React.FC<PostMatchResultsProps> = ({
                             typeof propRecord === 'object' && propRecord !== null
                               ? propRecord.houses
                               : 0;
-                          const groupColor = space.group
-                            ? PROPERTY_GROUP_COLORS[space.group]
-                            : '#64748b';
+                          const groupColor =
+                            getSpaceGroupColor(spaceId) ||
+                            (space.group ? PROPERTY_GROUP_COLORS[space.group] : '#64748b');
 
                           return (
                             <div

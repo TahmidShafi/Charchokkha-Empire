@@ -1163,7 +1163,7 @@ button:disabled {
 .inward-edge-top .tile-color-strip {
   order: 2;
   width: 100%;
-  height: 5px;
+  height: 3.5px;
   flex-shrink: 0;
 }
 
@@ -1173,7 +1173,7 @@ button:disabled {
 .inward-edge-bottom .tile-color-strip {
   order: 0;
   width: 100%;
-  height: 5px;
+  height: 3.5px;
   flex-shrink: 0;
 }
 
@@ -1183,7 +1183,7 @@ button:disabled {
 .inward-edge-left .tile-color-strip {
   order: 2;
   height: 100%;
-  width: 5px;
+  width: 3.5px;
   flex-shrink: 0;
 }
 
@@ -1193,13 +1193,220 @@ button:disabled {
 .inward-edge-right .tile-color-strip {
   order: 0;
   height: 100%;
-  width: 5px;
+  width: 3.5px;
   flex-shrink: 0;
 }
 
 .tile-color-strip {
   border-radius: 1px;
   flex-shrink: 0;
+}
+
+.tile-group-color-strip {
+  border-radius: 1px;
+  flex-shrink: 0;
+  z-index: 2;
+  transition: box-shadow var(--transition-fast);
+}
+
+/* Separate Owner Indicator Dot in Outer Corner */
+.tile-owner-indicator {
+  position: absolute;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.inward-edge-top .tile-owner-indicator {
+  top: 2px;
+  right: 2px;
+}
+
+.inward-edge-bottom .tile-owner-indicator {
+  bottom: 2px;
+  right: 2px;
+}
+
+.inward-edge-left .tile-owner-indicator {
+  top: 2px;
+  left: 2px;
+}
+
+.inward-edge-right .tile-owner-indicator {
+  top: 2px;
+  right: 2px;
+}
+
+.tile-owner-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  box-sizing: border-box;
+}
+
+@media (max-width: 600px) {
+  .inward-edge-top .tile-color-strip {
+    height: 3px;
+  }
+  .inward-edge-bottom .tile-color-strip {
+    height: 3px;
+  }
+  .inward-edge-left .tile-color-strip {
+    width: 3px;
+  }
+  .inward-edge-right .tile-color-strip {
+    width: 3px;
+  }
+  .tile-owner-dot {
+    width: 5px;
+    height: 5px;
+  }
+}
+
+/* Popover Property Group Badge */
+.popover-group-badge-wrapper {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 9999px;
+  border: 1px solid;
+  margin-top: 4px;
+  margin-bottom: 2px;
+  width: fit-content;
+}
+
+.popover-group-color-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.popover-group-badge-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: capitalize;
+}
+
+/* Popover Group Collection Set Tracker */
+.popover-group-collection-box {
+  background: rgba(15, 23, 42, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-md);
+  padding: 8px 10px;
+  margin-top: 8px;
+  margin-bottom: 4px;
+}
+
+.popover-group-collection-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.popover-group-collection-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #e2e8f0;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.group-color-sample-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.popover-group-hex-tag {
+  font-size: 0.68rem;
+  color: #94a3b8;
+}
+
+.popover-group-properties-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.popover-group-prop-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 6px;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.03);
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+}
+
+.popover-group-prop-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.popover-group-prop-item.item-current {
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  font-weight: 700;
+}
+
+.popover-group-prop-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.prop-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.popover-group-prop-name {
+  color: #f1f5f9;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.popover-group-prop-right {
+  flex-shrink: 0;
+}
+
+.popover-group-owner-tag {
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.popover-group-unowned-tag {
+  font-size: 0.68rem;
+  color: #64748b;
+  font-style: italic;
+}
+
+/* Trade Pill Group Dot */
+.trade-prop-group-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  margin-right: 5px;
+  vertical-align: middle;
 }
 
 /* Improvements (Houses / Hotel) - Placed in flex flow between body & color strip */

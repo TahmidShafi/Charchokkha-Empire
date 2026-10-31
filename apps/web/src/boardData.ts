@@ -11,18 +11,121 @@ export type { BoardSpace, PropertyGroup, SpaceType };
 export { getBoardSpace, TOTAL_SPACES };
 
 /**
- * Canonical color palette for property color groups.
- * Tuned for maximum contrast and distinctiveness on dark board surfaces.
+ * Visual Property Group specification for the 10-group color system.
  */
-export const PROPERTY_GROUP_COLORS: Record<PropertyGroup, string> = {
-  brown: '#a855f7',  // vibrant purple-brown (Rahattarpool, Chandgaon)
-  sky: '#0284c7',    // cyan/sky blue (Guaalpara, Mithagoli, Akborshah)
-  pink: '#ec4899',   // hot pink (Mern Sun, CGHS, Orchid)
-  orange: '#f97316', // bright orange (Muradpur, Oxygen, Nanupur)
-  red: '#ef4444',    // vibrant red (Uttara, Bashundhara, Aftabnagar)
-  yellow: '#eab308', // gold yellow (Mini Kashmir, Bashkhali, Ghuna)
-  green: '#10b981',  // emerald green (Bogalake, Thanchi, Tindu)
-  blue: '#3b82f6',   // royal blue (Lake Bilash, Saint Martin)
+export interface PropertyGroupDefinition {
+  id: number;
+  name: string;
+  colorName: string;
+  color: string;
+  propertyIds: number[];
+}
+
+/**
+ * 10 clearly distinguishable property groups with dark-theme friendly palette.
+ */
+export const PROPERTY_GROUPS: Record<number, PropertyGroupDefinition> = {
+  1: { id: 1, name: 'Group 1', colorName: 'Rose', color: '#F472B6', propertyIds: [1, 3] },
+  2: { id: 2, name: 'Group 2', colorName: 'Orange', color: '#FB923C', propertyIds: [5, 7, 8] },
+  3: { id: 3, name: 'Group 3', colorName: 'Sky Blue', color: '#38BDF8', propertyIds: [10, 11] },
+  4: { id: 4, name: 'Group 4', colorName: 'Emerald', color: '#34D399', propertyIds: [13, 14, 16, 17] },
+  5: { id: 5, name: 'Group 5', colorName: 'Amber', color: '#FBBF24', propertyIds: [19, 21, 23] },
+  6: { id: 6, name: 'Group 6', colorName: 'Violet', color: '#A78BFA', propertyIds: [25, 27, 29] },
+  7: { id: 7, name: 'Group 7', colorName: 'Red', color: '#F87171', propertyIds: [31, 32] },
+  8: { id: 8, name: 'Group 8', colorName: 'Cyan', color: '#22D3EE', propertyIds: [34, 35] },
+  9: { id: 9, name: 'Group 9', colorName: 'Brown', color: '#C08457', propertyIds: [37, 38, 40, 41] },
+  10: { id: 10, name: 'Group 10', colorName: 'Silver', color: '#CBD5E1', propertyIds: [43, 45, 47] },
+};
+
+/**
+ * Direct lookup map from Space ID to its PropertyGroupDefinition.
+ */
+export const SPACE_PROPERTY_GROUPS: Record<number, PropertyGroupDefinition> = {
+  // Group 1: Rahattarpool, Chandgaon
+  1: PROPERTY_GROUPS[1],
+  3: PROPERTY_GROUPS[1],
+  // Group 2: Gualpara, Mithagoli, Akborshah
+  5: PROPERTY_GROUPS[2],
+  7: PROPERTY_GROUPS[2],
+  8: PROPERTY_GROUPS[2],
+  // Group 3: Bualkhali, Kaptai
+  10: PROPERTY_GROUPS[3],
+  11: PROPERTY_GROUPS[3],
+  // Group 4: Mern Sun, Orkid, CGHS, Sunny Dawn
+  13: PROPERTY_GROUPS[4],
+  14: PROPERTY_GROUPS[4],
+  16: PROPERTY_GROUPS[4],
+  17: PROPERTY_GROUPS[4],
+  // Group 5: Muradpur, Oxygen, Nanupur
+  19: PROPERTY_GROUPS[5],
+  21: PROPERTY_GROUPS[5],
+  23: PROPERTY_GROUPS[5],
+  // Group 6: Aftabnagar, Bashundhara, Uttara
+  25: PROPERTY_GROUPS[6],
+  27: PROPERTY_GROUPS[6],
+  29: PROPERTY_GROUPS[6],
+  // Group 7: Prem Bazar, Mini Kashmir
+  31: PROPERTY_GROUPS[7],
+  32: PROPERTY_GROUPS[7],
+  // Group 8: Bashkhali, Ghuna
+  34: PROPERTY_GROUPS[8],
+  35: PROPERTY_GROUPS[8],
+  // Group 9: Bogalake, Thanchi, Tindu, Kukichin Camp
+  37: PROPERTY_GROUPS[9],
+  38: PROPERTY_GROUPS[9],
+  40: PROPERTY_GROUPS[9],
+  41: PROPERTY_GROUPS[9],
+  // Group 10: Gorbagudi, Lake Bilash, Saint Martin
+  43: PROPERTY_GROUPS[10],
+  45: PROPERTY_GROUPS[10],
+  47: PROPERTY_GROUPS[10],
+};
+
+/**
+ * Returns the property group definition for any board space.
+ */
+export function getSpacePropertyGroup(spaceId: number): PropertyGroupDefinition | undefined {
+  return SPACE_PROPERTY_GROUPS[spaceId];
+}
+
+/**
+ * Returns the property group color hex for any board space.
+ */
+export function getSpaceGroupColor(spaceId: number): string | undefined {
+  return SPACE_PROPERTY_GROUPS[spaceId]?.color;
+}
+
+/**
+ * Returns all property IDs belonging to a specific group number (1 to 10).
+ */
+export function getPropertiesInGroup(groupId: number): number[] {
+  return PROPERTY_GROUPS[groupId]?.propertyIds ?? [];
+}
+
+/**
+ * Canonical color palette for property color groups.
+ * Updated to support the 10-group color system while preserving backward compatibility.
+ */
+export const PROPERTY_GROUP_COLORS: Record<PropertyGroup | number | string, string> = {
+  1: '#F472B6',
+  2: '#FB923C',
+  3: '#38BDF8',
+  4: '#34D399',
+  5: '#FBBF24',
+  6: '#A78BFA',
+  7: '#F87171',
+  8: '#22D3EE',
+  9: '#C08457',
+  10: '#CBD5E1',
+  // Canonical string aliases for backward compatibility:
+  brown: '#F472B6',  // Group 1: Rose
+  sky: '#FB923C',    // Group 2: Orange (and Group 3: Sky Blue)
+  pink: '#34D399',   // Group 4: Emerald
+  orange: '#FBBF24', // Group 5: Amber
+  red: '#A78BFA',    // Group 6: Violet
+  yellow: '#F87171', // Group 7: Red (and Group 8: Cyan)
+  green: '#C08457',  // Group 9: Brown
+  blue: '#CBD5E1',   // Group 10: Silver
 };
 
 /**
